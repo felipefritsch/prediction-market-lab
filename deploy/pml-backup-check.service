@@ -1,0 +1,10 @@
+[Unit]
+Description=Verify Prediction Market Lab backup restoration
+
+[Service]
+Type=oneshot
+User=pml
+WorkingDirectory=/opt/prediction-market-lab
+ExecStart=/opt/prediction-market-lab/.venv/bin/pml backup-check data/live
+NoNewPrivileges=true
+PrivateTmp=true

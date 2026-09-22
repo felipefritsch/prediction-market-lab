@@ -1,0 +1,22 @@
+[Unit]
+Description=Prediction Market Lab public collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pml
+WorkingDirectory=/opt/prediction-market-lab
+ExecStart=/opt/prediction-market-lab/.venv/bin/pml --config config/default.toml collect --watchlist data/watchlist.json --out data/live --seconds 259200
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=45
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/prediction-market-lab/data
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

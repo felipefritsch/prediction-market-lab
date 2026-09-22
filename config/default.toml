@@ -1,0 +1,30 @@
+[capture]
+max_assets = 80
+max_fixtures = 10
+max_comparators = 6
+queue_size = 4096
+segment_records = 1000
+flush_seconds = 5
+poll_seconds = 60
+max_raw_gb = 20
+max_clock_skew_seconds = 5
+
+[paper]
+initial_cash = "10000"
+event_risk_limit = "100"
+portfolio_risk_limit = "1000"
+latency_ms = 250
+cancel_latency_ms = 250
+order_size = "5"
+queue_multiplier = "1"
+
+[research]
+horizons_seconds = [10, 60, 300]
+random_seed = 2026
+bootstrap_samples = 200
+holdout_fraction = 0.3
+
+[budget]
+infrastructure_monthly_usd = 30
+model_monthly_usd = 10
+reserve_monthly_usd = 10

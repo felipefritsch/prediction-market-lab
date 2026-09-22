@@ -1,0 +1,19 @@
+services:
+  collector:
+    build: .
+    command: ["--config", "config/default.toml", "collect", "--watchlist", "/app/data/watchlist.json", "--out", "/app/data/live", "--seconds", "259200"]
+    restart: on-failure:5
+    init: true
+    stop_grace_period: 45s
+    volumes:
+      - ./data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

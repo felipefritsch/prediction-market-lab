@@ -1,0 +1,50 @@
+[project]
+name = "prediction-market-lab"
+version = "0.1.0"
+description = "Reproducible prediction-market microstructure research and paper execution"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "duckdb>=1.1", "httpx>=0.28", "numpy>=2.0", "pandas>=2.2",
+  "plotly>=6", "polymarket-client==0.10.0", "pyarrow>=19", "pydantic>=2.10",
+  "scikit-learn>=1.6", "streamlit>=1.45", "websockets>=15",
+]
+
+[dependency-groups]
+dev = ["mypy>=1.15", "pytest>=8", "pytest-asyncio>=0.25", "ruff>=0.11", "nbclient>=0.10", "nbformat>=5", "ipykernel>=6", "pandas-stubs>=2.2"]
+
+[project.scripts]
+pml = "prediction_market_lab.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.format]
+indent-style = "tab"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+exclude = ["notebooks", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prediction_market_lab"]
+
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "README.md" }, { file = "src/**/*.py" }]

@@ -1,0 +1,29 @@
+name: Offline verification
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.2"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --locked --no-editable
+      - run: uv run --locked --no-editable ruff check src tests scripts notebooks
+      - run: uv run --locked --no-editable ruff format --check src tests scripts notebooks
+      - run: uv run --locked --no-editable mypy src/prediction_market_lab
+      - run: uv run --locked --no-editable pytest -q
+      - run: uv run --locked --no-editable pml demo --out data/ci-demo --quick
+      - run: uv run --locked --no-editable python scripts/run_notebooks.py --workspace data/ci-demo --out artifacts/notebooks
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-demo
+          path: |
+            data/ci-demo/research
+            artifacts/notebooks
