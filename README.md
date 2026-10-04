@@ -58,6 +58,18 @@ uv run --locked --no-editable python scripts/run_notebooks.py --workspace data/d
 
 Executed copies go to `artifacts/notebooks/`. Notebooks call the same calculations as the CLI and terminal. Read the [research protocol](docs/research-protocol.md) before interpreting results.
 
+## Optional OpenAI SDK
+
+The OpenAI Python SDK is locked as a development dependency; no application module imports it and the container image omits it. Copy `.env.example` to `.env`, add a project-scoped key, and keep the real file local; `.env` is ignored by Git.
+
+```sh
+cp .env.example .env
+chmod 600 .env
+uv run --locked --no-editable --env-file .env pytest -q tests/test_openai_sdk.py
+```
+
+The test is offline: it verifies the installed SDK and standard `OPENAI_API_KEY` configuration with a fake value. It never sends a request or spends API credits. Optional model-backed summarization should remain behind the existing bounded-evidence interface and must fail back to the template report.
+
 ## Start prospective collection
 
 Discovery is read-only. Use exact sport abbreviations from the current catalogue; do not guess IDs or infer contracts from titles.
