@@ -20,7 +20,7 @@ Open the local dashboard at `http://127.0.0.1:8501`. The standalone report is `d
 
 **The demo is synthetic.** Its prices and outcomes are not a calibrated simulation and establish no trading edge. Observed, synthetic, derived and simulated records carry separate provenance fields.
 
-The application can be exercised offline after dependency installation. Live connectivity and EPL/UCL instrument mappings remain unverified in this environment: Polymarket's public Gamma host failed DNS resolution during the implementation check. The **72-hour pilot plus matchday** and **eight weeks of prospective recording** are outstanding empirical milestones. See [delivery status](docs/delivery-status.md).
+The application can be exercised offline after dependency installation. Live public connectivity was verified on 14 October 2026 with a one-hour EPL recording; rule reviews for that recording still await researcher sign-off. The **72-hour pilot plus matchday** and **eight weeks of prospective recording** are outstanding empirical milestones. See [delivery status](docs/delivery-status.md).
 
 ## Inspect the complete chain
 

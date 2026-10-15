@@ -16,6 +16,17 @@ A bounded unauthenticated check failed DNS resolution for Gamma, Data API, CLOB,
 
 The reports are retained under ignored `data/connection-checks/2026-10-02-sandbox.json` and `data/connection-checks/2026-10-02-direct.json`. Repeat the check with `scripts/probe_public_data.py` using a new output filename. No VPN, resolver changes, wallet credentials, authenticated requests or orders were used.
 
+### Live public-data check — 14 October 2026 (UTC)
+
+From the same machine, Polymarket hosts resolved only through a consumer VPN; this check used one. It was unauthenticated and read-only: no wallet, credentials or orders.
+
+- The probe (`data/connection-checks/2026-10-13-vpn.json`) returned HTTP 200 from Gamma, CLOB `/time` and `/book`, Data API `/v2/trades` and `/v2/oi`. The market WebSocket delivered `book` and `price_change` frames; the sports WebSocket delivered score frames.
+- `pml sports`, `discover --sport epl`, `review-template`, `catalog-build` and `select` ran unchanged against live payloads. Selection kept six complete EPL 1X2 families for 17–18 October (36 assets).
+- A one-hour capture (01:14–02:14 UTC) recorded 22,156 records with no errors or reconnects; all 36 books ended usable. `verify` and `backup-check` confirmed 22,194 archived records. Replay, three paper strategies and research ran on the capture. Projected raw storage was about 3 GB per 30 days for this pre-match watchlist.
+- **The rule reviews behind this watchlist were machine-assisted** (template wording checked programmatically, two families read in full) and are labelled pending researcher sign-off. The capture is a connectivity and pipeline check, not a qualified pilot.
+
+Observed limits from that hour: the sports stream carried other leagues only, so the score-to-fixture join remains untested until a matchday; the market stream also delivered `new_market` messages for unrelated markets; canonical trade rows include public wallet and profile fields. Passive strategies received zero fills because public trade notifications lack stable identities, as designed.
+
 ## Explicit V1 boundaries
 
 - Selection is refreshed between fixed-watchlist capture sessions; no unattended auto-approval of new rule mappings.

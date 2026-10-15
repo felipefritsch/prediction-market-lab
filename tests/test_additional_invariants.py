@@ -50,6 +50,29 @@ def test_canonical_hash_does_not_collapse_multiple_legs():
 	assert not engine.broker.fills
 
 
+def test_refetched_trade_page_keeps_twins_but_not_repeats():
+	engine = ReplayEngine()
+	row = {
+		"transaction_hash": "t",
+		"token_id": "a",
+		"condition_id": "c",
+		"price": ".5",
+		"size": "10",
+		"side": "BUY",
+		"timestamp": 1767225600,
+	}
+	newer = {**row, "transaction_hash": "u"}
+	for sequence, rows in enumerate(([row, row], [newer, row, row]), start=1):
+		engine.consume(
+			raw(
+				{"event_type": "canonical_trades", "response": {"data": rows}},
+				source="canonical_trades",
+				sequence=sequence,
+			)
+		)
+	assert len(engine.canonical_trades) == 3
+
+
 def test_real_oi_not_volume():
 	engine = ReplayEngine()
 	engine.consume(

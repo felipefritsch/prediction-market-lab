@@ -40,10 +40,10 @@ The full demo uses deliberately fictitious inputs. Its 98.3% usable recorded ass
 
 ## Not verified or completed
 
-- Live Polymarket discovery: the public Gamma host failed DNS resolution, including an authorized retry outside the restricted sandbox. SDK/source documentation checks and synthetic schema fixtures cannot replace recorded live-response tests.
-- Actual EPL/UCL identifiers, reviewed live 1X2 families and sports-stream payload joins.
+- Live Polymarket discovery failed DNS on 21 September; it was verified over a VPN on 14 October 2026 (see `delivery-status.md`). That check does not cover a matchday, the sports-stream join or a sustained recording.
+- Researcher-signed EPL/UCL rule reviews and sports-stream payload joins.
 - A 72-hour pilot plus a matchday, measured live storage/cost forecast, and eight weeks of prospective data.
-- Remote GitHub Actions, Docker deployment or systemd service operation. Their configuration is provided; successful local tests do not establish those deployments.
+- Docker deployment or systemd service operation. Their configuration is provided; successful local tests do not establish those deployments.
 - Observed-data research conclusions or executable trading profitability.
 - A recorded recruiting video. A written walkthrough is provided in `walkthrough.md`.
 

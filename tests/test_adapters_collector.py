@@ -84,3 +84,36 @@ async def test_collector_small_queue_survives_optional_feed_failure(
 	assert health["records"] > 0
 	assert "sports" in health["errors"]
 	assert any(r.source == "market" for r in read_archive(tmp_path))
+
+
+@pytest.mark.asyncio
+async def test_collector_archives_unchanged_trade_page_once(tmp_path, contract, monkeypatch):
+	class Adapter:
+		async def frames(self, assets, *, sports=False):
+			while True:
+				yield json.dumps(snapshot().payload)
+				await asyncio.sleep(0.01)
+
+		async def get(self, url, params=None):
+			return {}
+
+		async def trade_pages(self, condition, *, pages):
+			yield {"data": [{"transaction_hash": "t", "token_id": "a"}], "pagination": {}}
+
+		async def close(self):
+			pass
+
+	monkeypatch.setattr("prediction_market_lab.collector.PolymarketAdapter", Adapter)
+	await asyncio.wait_for(
+		collect(
+			tmp_path,
+			[contract],
+			0.3,
+			CaptureConfig(flush_seconds=0.03).model_copy(update={"poll_seconds": 0.02}),
+			sports=False,
+		),
+		timeout=3,
+	)
+	sources = [r.source for r in read_archive(tmp_path)]
+	assert sources.count("server_time") > 1
+	assert sources.count("canonical_trades") == 1

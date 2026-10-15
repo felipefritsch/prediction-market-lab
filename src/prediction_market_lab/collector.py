@@ -38,6 +38,7 @@ async def collect(
 	reconnect = asyncio.Event()
 	engine = ReplayEngine(retain=False)
 	last_resync = 0.0
+	trade_pages: dict[str, list[bytes]] = {}
 	health: dict[str, Any] = {
 		"started_at": utc_now().isoformat(),
 		"records": 0,
@@ -143,7 +144,15 @@ async def collect(
 					)
 			for condition in sorted({c.condition_id for c in contracts}):
 				try:
+					known = trade_pages.get(condition)
+					first = True
 					async for page in adapter.trade_pages(condition, pages=3):
+						rows = [canonical(row) for row in page["data"]]
+						if first:
+							first = False
+							if rows == known:
+								break
+							trade_pages[condition] = rows
 						await emit(
 							"canonical_trades",
 							session,
@@ -155,6 +164,9 @@ async def collect(
 						)
 						if stop.is_set():
 							return
+						# Pages are newest first: an already archived row means older pages are known.
+						if known and set(rows) & set(known):
+							break
 				except asyncio.CancelledError:
 					raise
 				except Exception as exc:

@@ -60,6 +60,7 @@ class ReplayEngine:
 		self.ofi: dict[str, deque[tuple[datetime, float]]] = defaultdict(deque)
 		self.trade_times: dict[str, deque[datetime]] = defaultdict(deque)
 		self._trade_ids: set[str] = set()
+		self._canonical_emitted: Counter[str] = Counter()
 		self._pending_metadata: list[Contract] = []
 		self._last_depth: dict[str, datetime] = {}
 
@@ -339,6 +340,7 @@ class ReplayEngine:
 		if not isinstance(rows, list):
 			self.counts["unknown_analytics_schema"] += 1
 			return
+		page_counts: Counter[str] = Counter()
 		for row in rows:
 			try:
 				if event.kind == "open_interest":
@@ -370,6 +372,11 @@ class ReplayEngine:
 						)
 					}
 					candidate = hashlib.sha256(canonical(identity_fields)).hexdigest()
+					# A refetched page repeats rows; only twins within one page are distinct candidates.
+					page_counts[candidate] += 1
+					if page_counts[candidate] <= self._canonical_emitted[candidate]:
+						continue
+					self._canonical_emitted[candidate] += 1
 					self.canonical_trades.append(
 						{
 							"asset_id": str(row["token_id"]),

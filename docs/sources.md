@@ -1,6 +1,6 @@
 # Source register and interface evidence
 
-Checked against official documentation and installed `polymarket-client==0.10.0` source on 2026-09-21. API documentation can change: rerun the live adapter checks before a prospective pilot. Local DNS failure prevented actual Gamma/EPL/UCL payload verification during this implementation.
+Checked against official documentation and installed `polymarket-client==0.10.0` source on 2026-09-21. API documentation can change: rerun the live adapter checks before a prospective pilot. Local DNS failure prevented payload verification at that time; live Gamma, CLOB, Data API and stream payloads were checked over a VPN on 14 October 2026.
 
 | Source | Use / constraint |
 |---|---|
