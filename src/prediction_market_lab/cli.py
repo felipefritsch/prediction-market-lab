@@ -15,7 +15,13 @@ from typing import Any
 from prediction_market_lab.adapters import GAMMA, PolymarketAdapter, contracts_from_discovery
 from prediction_market_lab.config import Settings
 from prediction_market_lab.models import Contract, RawRecord, timestamp, utc_now
-from prediction_market_lab.operations import backup, budget_forecast, restore, restore_check
+from prediction_market_lab.operations import (
+	backup,
+	backup_files,
+	budget_forecast,
+	restore,
+	restore_check,
+)
 from prediction_market_lab.paper import PaperConfig
 from prediction_market_lab.storage import (
 	RawArchive,
@@ -131,6 +137,9 @@ def parser() -> argparse.ArgumentParser:
 		command = sub.add_parser(name)
 		command.add_argument("source", type=Path)
 		command.add_argument("destination", type=Path)
+	backup_research = sub.add_parser("backup-files")
+	backup_research.add_argument("destination", type=Path)
+	backup_research.add_argument("files", type=Path, nargs="+")
 	budget = sub.add_parser("budget")
 	budget.add_argument("--raw-bytes", type=int, required=True)
 	budget.add_argument("--elapsed-seconds", type=float, required=True)
@@ -369,7 +378,7 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 		while (now := utc_now()) < until:
 			done = forecast.done_slots(args.out)
 			due = [
-				(fixture, slot)
+				(fixture, slot, at)
 				for fixture in fixtures
 				for slot, at in forecast.forecast_slots(fixture.kickoff)
 				if f"{fixture.fixture_id}:{slot}" not in done
@@ -380,7 +389,7 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 					args.data, forecast.seasons(args.season - 8, args.season), refresh=current
 				)
 				evidence = json.loads(args.evidence.read_text()) if args.evidence.exists() else []
-				for fixture, slot in due:
+				for fixture, slot, at in due:
 					record = await forecast.forecast_once(
 						fixture,
 						slot,
@@ -395,6 +404,8 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 						prices=prices,
 						aware_models=aware,
 					)
+					# A restart can fire a slot late; the label alone would hide that.
+					record["scheduled_at"] = at.isoformat()
 					record = forecast.freeze(args.out, record)
 					if args.publish_dir:
 						try:
@@ -646,6 +657,8 @@ def run(args: argparse.Namespace) -> Any:
 		}
 	if args.command == "backup":
 		return backup(args.source, args.destination)
+	if args.command == "backup-files":
+		return backup_files(args.destination, args.files)
 	if args.command == "restore":
 		return restore(args.source, args.destination)
 	if args.command == "backup-check":

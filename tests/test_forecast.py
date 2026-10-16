@@ -201,9 +201,65 @@ def test_publish_hash_pushes_to_branch(tmp_path):
 		subprocess.run(["git", "-C", str(work), *args], check=True)
 	forecast.publish_hash(work, {"fixture_id": "f", "slot": "t-1h", "sha256": "abc"})
 	log = subprocess.run(
-		["git", "-C", str(remote), "log", "--format=%s", "forecast-log"],
+		["git", "-C", str(remote), "log", "-1", "--format=%B", "forecast-log"],
 		check=True,
 		capture_output=True,
 		text=True,
 	).stdout
-	assert log.splitlines()[0] == "Forecast hash f t-1h"
+	assert log.strip() == "Forecast hash f t-1h"
+
+
+def test_models_only_read_evidence_retrieved_by_forecast_time():
+	def item(evidence_id, first_seen, fixture_id="f", allowed=True):
+		return {
+			"evidence_id": evidence_id,
+			"fixture_id": fixture_id,
+			"first_seen": first_seen,
+			"allow_model_input": allowed,
+		}
+
+	evidence = [
+		item("late", "2026-10-17T12:00:00.5Z"),
+		item("second", "2026-10-17T11:00:00Z"),
+		item("first", "2026-10-16T11:00:00+00:00"),
+		item("other", "2026-10-16T11:00:00Z", fixture_id="g"),
+		item("blocked", "2026-10-16T11:00:00Z", allowed=False),
+	]
+	now = datetime(2026, 10, 17, 12, tzinfo=UTC)
+	assert [e["evidence_id"] for e in forecast.model_evidence(evidence, "f", now)] == [
+		"first",
+		"second",
+	]
+
+
+def test_evaluate_counts_ensembles_missing_a_member(tmp_path):
+	path = tmp_path / "forecasts.jsonl"
+	book = {f"{k}_{s}": {"bid": 0.3, "ask": 0.32} for k in forecast.OUTCOMES for s in ("yes", "no")}
+	for fixture_id, home, away, members in (
+		("f", "Everton FC", "Chelsea FC", {"elo": UNIFORM, "llm:a": UNIFORM}),
+		("g", "Fulham FC", "Hull City AFC", {"elo": UNIFORM}),
+	):
+		forecast.freeze(
+			path,
+			{
+				"fixture_id": fixture_id,
+				"slot": "t-1h",
+				"kickoff": "2026-10-17T14:00:00+00:00",
+				"home": home,
+				"away": away,
+				"members": members,
+				"ensemble": UNIFORM,
+				"pooled_members": sorted(members),
+				"market": {"book": book, "probabilities": UNIFORM},
+				"fee_rate": 0.05,
+			},
+		)
+	matches = pd.DataFrame(
+		[
+			{"HomeTeam": h, "AwayTeam": a, "FTHG": 1, "FTAG": 1, "date": pd.Timestamp("2026-10-17")}
+			for h, a in (("Everton", "Chelsea"), ("Fulham", "Hull"))
+		]
+	)
+	slot = forecast.evaluate(path, matches)["slots"]["t-1h"]
+	assert slot["matches"] == 2
+	assert slot["incomplete_ensembles"] == 1

@@ -31,6 +31,8 @@ No trading. No wallet, keys to a venue, or order endpoint exist.
 
 ## Open problems
 
+- **Forecasts and evidence are not backed up off this Mac** (Time Machine failed to mount on 16 Oct). Copy them with `pml backup-files` to storage on another machine after each slot ([runbook](docs/runbook.md#backup-and-restore)).
+
 - **Power and sleep:** the Mac sleeps when the lid is closed on battery (≈97 min of gaps on Friday morning). Needs the charger connected through Sunday.
 - **Network:** Polymarket resolves only via VPN here; API-Football's dashboard rejects the VPN (its API works). A server where both are reachable would remove both issues.
 - **First forecast has no evidence:** Everton–Chelsea T-24h raced its own search; fixed in `fe5cf0a`, record kept as frozen.

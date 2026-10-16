@@ -64,6 +64,32 @@ def backup(source: Path, destination: Path) -> dict[str, Any]:
 	return manifest
 
 
+def backup_files(destination: Path, sources: list[Path]) -> dict[str, Any]:
+	"""Checksummed copy of append-only research files that cannot be re-collected.
+
+	Forecasts, evidence and the spend ledger live outside the capture, so `backup` misses them.
+	The result restores and verifies with `restore`.
+	"""
+	names = [path.name for path in sources]
+	if len(set(names)) != len(names):
+		raise ValueError("Backed-up files need distinct names")
+	if destination.exists():
+		raise ValueError("Backup needs a new directory")
+	missing = [str(path) for path in sources if not path.is_file()]
+	if missing:
+		raise FileNotFoundError(f"Not a file: {', '.join(missing)}")
+	destination.mkdir(parents=True)
+	files: dict[str, str] = {}
+	for path in sources:
+		# One read, so the copy and its checksum agree while a watcher keeps appending.
+		content = path.read_bytes()
+		atomic_write(destination / path.name, content)
+		files[path.name] = hashlib.sha256(content).hexdigest()
+	manifest = {"files": files, "scope": "point-in-time copies of append-only research files"}
+	atomic_write(destination / "backup.json", canonical(manifest))
+	return manifest
+
+
 def restore(source: Path, destination: Path) -> dict[str, Any]:
 	if destination.exists():
 		raise FileExistsError("Restore destination must be new")

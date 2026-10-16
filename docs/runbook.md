@@ -38,6 +38,15 @@ Backups copy only committed raw manifests/segments, selected supporting files an
 
 The daily service tests local restore only. Configure a separately retained offsite copy to protect against machine loss. Do not call a local temporary restoration test an offsite backup.
 
+`pml backup` covers the capture only. Forecasts, evidence and the spend ledger cannot be re-collected, so copy them separately while watchers run, to a new directory on another machine or synced storage, after each forecast slot:
+
+```sh
+pml backup-files /path/to/new-research-backup data/evidence/evidence.json data/evidence/spend.jsonl data/evidence/state.json data/forecasts.jsonl
+pml restore /path/to/new-research-backup /path/to/new-restored-files
+```
+
+Each file is read once, so its copy and checksum agree even while a watcher appends. `restore` verifies every checksum.
+
 ## Cost forecast
 
 Monthly allocations: infrastructure/storage/backups $30, optional models $10, reserve $10. These are budgets, not vendor quotations. No billable service is provisioned by this repo.

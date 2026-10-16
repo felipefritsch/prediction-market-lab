@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from sklearn.linear_model import LogisticRegression, PoissonRegressor
 
 from prediction_market_lab.storage import atomic_write, canonical
+from prediction_market_lab.summarizer import PRICES as LLM_PRICES
 
 OUTCOMES = ("home", "draw", "away")
 SOURCE = "https://football-data.co.uk/mmz4281/{season}/{division}.csv"
@@ -71,7 +72,7 @@ def load_matches(
 					atomic_write(path, response.content)
 				frame = pd.read_csv(
 					io.BytesIO(path.read_bytes()), encoding="utf-8-sig", on_bad_lines="skip"
-				)
+				).copy()
 				frames.append(frame.assign(season=season, division=division))
 	matches = pd.concat(frames, ignore_index=True).dropna(
 		subset=["HomeTeam", "AwayTeam", "FTHG", "FTAG"]
@@ -232,14 +233,6 @@ def strip_odds(text: str) -> tuple[str, int]:
 	sentences = re.split(r"(?<=[.!?])\s+|\n+", text or "")
 	kept = [x for x in sentences if not (ODDS_WORDS.search(x) or ODDS_NUMBERS.search(x))]
 	return " ".join(kept).strip(), len(sentences) - len(kept)
-
-
-# USD per million tokens (input, output); checked 2026-10-16 on the OpenAI pricing page.
-LLM_PRICES = {
-	"gpt-5.4-mini": (0.75, 4.50),
-	"gpt-4.1-mini": (0.40, 1.60),
-	"gpt-5.4-nano": (0.20, 1.25),
-}
 
 
 OPENROUTER = "https://openrouter.ai/api/v1"
@@ -405,10 +398,7 @@ def publish_hash(worktree: Path, record: dict[str, Any]) -> None:
 	line = {k: record.get(k) for k in ("fixture_id", "slot", "made_at", "kickoff", "sha256")}
 	with (worktree / "hashes.jsonl").open("a") as handle:
 		handle.write(json.dumps(line) + "\n")
-	message = (
-		f"Forecast hash {record['fixture_id']} {record['slot']}\n\n"
-		"Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-	)
+	message = f"Forecast hash {record['fixture_id']} {record['slot']}"
 	for args in (["add", "hashes.jsonl"], ["commit", "-q", "-m", message], ["push", "-q"]):
 		subprocess.run(
 			["git", "-C", str(worktree), *args], check=True, capture_output=True, timeout=120
@@ -531,6 +521,22 @@ async def market_snapshot(adapter: Any, fixture: Fixture) -> dict[str, Any]:
 	}
 
 
+def model_evidence(
+	evidence: list[dict[str, Any]], fixture_id: str, now: datetime
+) -> list[dict[str, Any]]:
+	"""Items a model may read for this fixture, retrieved no later than the forecast time."""
+	return sorted(
+		(
+			e
+			for e in evidence
+			if e["fixture_id"] == fixture_id
+			and e["allow_model_input"]
+			and datetime.fromisoformat(e["first_seen"]) <= now
+		),
+		key=lambda e: datetime.fromisoformat(e["first_seen"]),
+	)
+
+
 async def forecast_once(
 	fixture: Fixture,
 	slot: str,
@@ -553,10 +559,7 @@ async def forecast_once(
 	errors: dict[str, str] = {}
 	members["elo"] = Elo().fit(played).predict(home, away)
 	members["goals"] = GoalModel().fit(played, now).predict(home, away)
-	items = sorted(
-		(e for e in evidence if e["fixture_id"] == fixture.fixture_id and e["allow_model_input"]),
-		key=lambda e: e["first_seen"],
-	)
+	items = model_evidence(evidence, fixture.fixture_id, now)
 	brief = [
 		{
 			k: e.get(k)
@@ -614,6 +617,7 @@ async def forecast_once(
 		"members": members,
 		"weights": "equal (pre-registered until enough frozen forecasts to fit out of sample)",
 		"ensemble": pool(pooled(members)),
+		"pooled_members": sorted(pooled(members)),
 		"ensemble_family": family_pool(members),
 		"market_aware_members": "mkt:* see the market midpoints and are never pooled",
 		"odds_sentences_removed_for_blind_members": removed,
@@ -720,6 +724,9 @@ def evaluate(
 		if not rows:
 			continue
 		names = sorted(set.intersection(*(set(r["members"]) for r, _, _ in rows)))
+		# A member whose every sample failed is missing from that record's pool.
+		in_pool = [set(r.get("pooled_members") or pooled(r["members"])) for r, _, _ in rows]
+		full_pool = set.union(*in_pool)
 		forecasts: dict[str, list[Probabilities]] = {
 			n: [r["members"][n] for r, _, _ in rows] for n in names
 		}
@@ -738,6 +745,7 @@ def evaluate(
 		clv = [t["clv"] for t in trades if t["clv"] is not None]
 		report["slots"][slot] = {
 			"matches": len(rows),
+			"incomplete_ensembles": sum(1 for pool_ in in_pool if pool_ != full_pool),
 			"scores": scoring.summarize(forecasts, results, "market"),
 			"diversity_js": scoring.diversity({**members, "market": forecasts["market"]}),
 			"leave_one_out_rps": scoring.leave_one_out(members, results),

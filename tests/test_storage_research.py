@@ -6,12 +6,29 @@ import pytest
 from prediction_market_lab.config import CaptureConfig
 from prediction_market_lab.incidents import evidence_asof, explain
 from prediction_market_lab.models import Evidence
-from prediction_market_lab.operations import backup, restore
+from prediction_market_lab.operations import backup, backup_files, restore
 from prediction_market_lab.replay import replay, update_metadata
 from prediction_market_lab.research import chronological_split, labels
 from prediction_market_lab.storage import Catalog, RawArchive, read_archive, verify_run
 from prediction_market_lab.universe import select_universe
 from tests.conftest import START, raw, snapshot
+
+
+def test_research_file_backup_restores_and_detects_tampering(tmp_path):
+	forecasts, ledger = tmp_path / "forecasts.jsonl", tmp_path / "spend.jsonl"
+	forecasts.write_text('{"sha256": "a"}\n')
+	ledger.write_text('{"usd": 0.01}\n')
+	manifest = backup_files(tmp_path / "backup", [forecasts, ledger])
+	assert set(manifest["files"]) == {"forecasts.jsonl", "spend.jsonl"}
+	assert restore(tmp_path / "backup", tmp_path / "restored")["files"] == 2
+	assert (tmp_path / "restored" / "forecasts.jsonl").read_text() == forecasts.read_text()
+	with pytest.raises(ValueError):
+		backup_files(tmp_path / "backup", [forecasts])
+	with pytest.raises(ValueError):
+		backup_files(tmp_path / "clash", [forecasts, tmp_path / "backup" / "forecasts.jsonl"])
+	(tmp_path / "backup" / "spend.jsonl").write_text("{}\n")
+	with pytest.raises(ValueError, match="checksum"):
+		restore(tmp_path / "backup", tmp_path / "restored-again")
 
 
 def test_journal_partial_tail_recovery_and_single_writer(tmp_path):
