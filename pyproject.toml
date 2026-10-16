@@ -8,6 +8,7 @@ dependencies = [
   "duckdb>=1.1",
   "httpx>=0.28",
   "numpy>=2.0",
+  "openai>=3.18.0",
   "pandas>=2.2",
   "plotly>=6",
   "polymarket-client==0.10.0",
@@ -19,7 +20,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["mypy>=1.15", "pytest>=8", "pytest-asyncio>=0.25", "ruff>=0.11", "nbclient>=0.10", "nbformat>=5", "ipykernel>=6", "pandas-stubs>=2.2", "openai>=3.18.0"]
+dev = ["mypy>=1.15", "pytest>=8", "pytest-asyncio>=0.25", "ruff>=0.11", "nbclient>=0.10", "nbformat>=5", "ipykernel>=6", "pandas-stubs>=2.2"]
 
 [project.scripts]
 pml = "prediction_market_lab.cli:main"

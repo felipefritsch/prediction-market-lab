@@ -58,17 +58,21 @@ uv run --locked --no-editable python scripts/run_notebooks.py --workspace data/d
 
 Executed copies go to `artifacts/notebooks/`. Notebooks call the same calculations as the CLI and terminal. Read the [research protocol](docs/research-protocol.md) before interpreting results.
 
-## Optional OpenAI SDK
+## Optional live evidence and model summaries
 
-The OpenAI Python SDK is locked as a development dependency; no application module imports it and the container image omits it. Copy `.env.example` to `.env`, add a project-scoped key, and keep the real file local; `.env` is ignored by Git.
+Web search (Exa), match events (API-Football) and model summaries (OpenAI) are optional and run separately from the market collector. Copy `.env.example` to `.env`, add only the keys you use, and keep the file local; `.env` is ignored by Git.
 
 ```sh
-cp .env.example .env
-chmod 600 .env
-uv run --locked --no-editable --env-file .env pytest -q tests/test_openai_sdk.py
+cp .env.example .env && chmod 600 .env
+# Timed searches per fixture (24 h, 2 h and 1 h before kickoff, every 15 min in play, after the match)
+uv run --locked --no-editable --env-file .env pml evidence-watch --watchlist data/watchlist.json --out data/evidence --until 2026-10-18T22:00:00Z --budget-usd 20
+# Propose API-Football fixture IDs; fill reviewed_by before passing --mapping to evidence-watch
+uv run --locked --no-editable --env-file .env pml football-map --watchlist data/watchlist.json --season 2026 --out data/football-map.json --spend-ledger data/evidence/spend.jsonl
+# Incident explanations from evidence retrieved before each move
+uv run --locked --no-editable --env-file .env pml research --run data/runs/window-01 --out data/research/window-01 --evidence data/evidence/evidence.json --summarizer openai --spend-ledger data/evidence/spend.jsonl
 ```
 
-The test is offline: it verifies the installed SDK and standard `OPENAI_API_KEY` configuration with a fake value. It never sends a request or spends API credits. Optional model-backed summarization should remain behind the existing bounded-evidence interface and must fail back to the template report.
+Every paid call is checked against one append-only spend ledger before it is made; a call that could exceed `--budget-usd` is refused. Each evidence item keeps the time it was first retrieved, so an incident only sees items retrieved before it. Search engines cannot be queried as of a past time: evidence for a match must be collected while it happens. Model output is a candidate explanation citing evidence IDs, marked for researcher review, and falls back to the template on any failure. API-Football's free plan refuses current-season lookups by league or date but serves live fixtures, so `evidence-watch` polls live EPL fixtures every six minutes during match windows and links them by exact team names and kickoff (or a reviewed `--mapping`). Event minutes are match time, so they label what happened, not when prices could first react.
 
 ## Start prospective collection
 

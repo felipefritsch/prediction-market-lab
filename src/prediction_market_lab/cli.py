@@ -117,6 +117,10 @@ def parser() -> argparse.ArgumentParser:
 	research.add_argument("--out", type=Path, required=True)
 	research.add_argument("--paper-root", type=Path)
 	research.add_argument("--evidence", type=Path)
+	research.add_argument("--summarizer", choices=["none", "openai"], default="none")
+	research.add_argument("--model", default="gpt-5.4-mini")
+	research.add_argument("--spend-ledger", type=Path, help="Shared spend ledger (JSON lines)")
+	research.add_argument("--budget-usd", type=float, default=20)
 	dashboard = sub.add_parser("dashboard")
 	dashboard.add_argument("--workspace", type=Path, default=Path("data/demo"))
 	dashboard.add_argument("--port", type=int, default=8501)
@@ -139,6 +143,21 @@ def parser() -> argparse.ArgumentParser:
 	feed.add_argument("--url", required=True)
 	feed.add_argument("--fixture", required=True)
 	feed.add_argument("--out", type=Path, required=True)
+	football = sub.add_parser(
+		"football-map", help="Propose watchlist-to-API-Football fixture IDs for review"
+	)
+	football.add_argument("--watchlist", type=Path, required=True)
+	football.add_argument("--season", type=int, required=True)
+	football.add_argument("--out", type=Path, required=True)
+	football.add_argument("--spend-ledger", type=Path, required=True)
+	watcher = sub.add_parser(
+		"evidence-watch", help="Timed web search and match events; separate from the collector"
+	)
+	watcher.add_argument("--watchlist", type=Path, required=True)
+	watcher.add_argument("--out", type=Path, required=True)
+	watcher.add_argument("--until", required=True)
+	watcher.add_argument("--mapping", type=Path, help="Reviewed football-map output")
+	watcher.add_argument("--budget-usd", type=float, default=20)
 	return p
 
 
@@ -239,8 +258,51 @@ async def online(args: argparse.Namespace, settings: Settings) -> Any:
 		await adapter.close()
 
 
+async def evidence_command(args: argparse.Namespace) -> Any:
+	import os
+
+	import httpx
+
+	from prediction_market_lab import live_evidence as live
+
+	contracts = [
+		Contract.model_validate(c) for c in json.loads(args.watchlist.read_text())["contracts"]
+	]
+	if args.command == "evidence-watch":
+		until = timestamp(args.until)
+		assert until is not None
+		mapping = json.loads(args.mapping.read_text()) if args.mapping else None
+		return await live.watch(
+			contracts, args.out, budget_usd=args.budget_usd, until=until, mapping=mapping
+		)
+	key = os.environ.get("API_FOOTBALL_KEY", "")
+	if not key:
+		raise ValueError("Set API_FOOTBALL_KEY (e.g. in .env)")
+	kickoffs = sorted(c.kickoff for c in contracts if c.kickoff)
+	if not kickoffs:
+		raise ValueError("Watchlist has no kickoff times")
+	cap = live.SpendCap(args.spend_ledger, 0)
+	async with httpx.AsyncClient(timeout=30) as client:
+		fixtures = await live.football_fixtures(
+			client,
+			key,
+			cap,
+			{
+				"league": live.EPL_LEAGUE,
+				"season": args.season,
+				"from": kickoffs[0].date().isoformat(),
+				"to": kickoffs[-1].date().isoformat(),
+			},
+		)
+	mapping = live.propose_mapping(contracts, fixtures)
+	save_new(args.out, mapping)
+	return mapping
+
+
 def run(args: argparse.Namespace) -> Any:
 	settings = Settings.load(args.config)
+	if args.command in {"football-map", "evidence-watch"}:
+		return asyncio.run(evidence_command(args))
 	if args.command == "ingest-rss":
 		from prediction_market_lab.evidence_sources import fetch_feed
 
@@ -370,14 +432,25 @@ def run(args: argparse.Namespace) -> Any:
 			if args.paper_root
 			else {}
 		)
+		summarizer = None
+		if args.summarizer == "openai":
+			from prediction_market_lab.live_evidence import SpendCap
+			from prediction_market_lab.summarizer import OpenAISummarizer
+
+			if args.spend_ledger is None:
+				raise ValueError("--summarizer openai requires --spend-ledger")
+			cap = SpendCap(args.spend_ledger, args.budget_usd)
+			summarizer = OpenAISummarizer(cap, args.model)
 		result = report(
 			args.run,
 			args.out,
 			paper_runs=runs,
 			evidence_path=args.evidence,
 			research_config=settings.research,
+			summarizer=summarizer,
 		)
-		return {"report": result["report"], "incidents": result["incidents"]}
+		spent = {"spent_usd": round(cap.spent, 4)} if summarizer else {}
+		return {"report": result["report"], "incidents": result["incidents"], **spent}
 	if args.command == "dashboard":
 		app = Path(__file__).with_name("app.py")
 		return {

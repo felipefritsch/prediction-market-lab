@@ -85,6 +85,7 @@ def build_incidents(
 	*,
 	threshold_pp: float = 3,
 	cooldown_seconds: int = 300,
+	summarizer: Summarizer | None = None,
 ) -> list[dict[str, Any]]:
 	if features.empty or "midpoint" not in features:
 		return []
@@ -155,7 +156,7 @@ def build_incidents(
 					"midpoint_5m": float(later.iloc[0].midpoint) if not later.empty else None,
 				},
 			}
-			packet["explanation"] = explain(packet)
+			packet["explanation"] = explain(packet, summarizer)
 			incidents.append(packet)
 			last[row.fixture_id] = row.received_at
 	return sorted(incidents, key=lambda p: (p["asof"], p["incident_id"]))

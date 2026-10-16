@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 import plotly.express as px
 
-from prediction_market_lab.incidents import build_incidents, read_evidence
+from prediction_market_lab.incidents import Summarizer, build_incidents, read_evidence
 from prediction_market_lab.research import execution_study, liquidity_study, load_table, shock_study
 from prediction_market_lab.storage import atomic_write, canonical
 
@@ -30,6 +30,7 @@ def report(
 	paper_runs: dict[str, Path] | None = None,
 	evidence_path: Path | None = None,
 	research_config: dict[str, Any] | None = None,
+	summarizer: Summarizer | None = None,
 ) -> dict[str, Any]:
 	if output.exists():
 		raise FileExistsError("Choose a new report directory")
@@ -44,7 +45,9 @@ def report(
 		"shocks": shock_study(features, events),
 		"execution": execution_study(paper_runs or {}),
 	}
-	incidents = build_incidents(features, contracts, read_evidence(evidence_path))
+	incidents = build_incidents(
+		features, contracts, read_evidence(evidence_path), summarizer=summarizer
+	)
 	atomic_write(output / "studies.json", canonical(studies))
 	atomic_write(output / "incidents.json", canonical(incidents))
 	provenance = (
