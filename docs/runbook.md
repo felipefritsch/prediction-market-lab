@@ -47,6 +47,16 @@ pml restore /path/to/new-research-backup /path/to/new-restored-files
 
 Each file is read once, so its copy and checksum agree even while a watcher appends. `restore` verifies every checksum.
 
+### Automatic research backups
+
+Set `PML_BACKUP_DIR` in `.env` to an absolute path on another machine or synced storage. There is no default: commands that need it stop with an error when it is unset or relative, and they never create the directory, so an unmounted volume cannot turn into a local folder.
+
+- `forecast-watch --backup-after-slot` (on in [`scripts/pilot/forecasts.sh`](../scripts/pilot/forecasts.sh)) refuses to start without the variable. After each batch of due slots it copies `forecasts.jsonl`, `evidence.json`, `spend.jsonl` and `state.json` to a new folder `$PML_BACKUP_DIR/<UTC time, e.g. 20261017T054012Z>/`, restores it into a temporary directory and only then writes `verified.json`. A failed backup prints `BACKUP FAILED: ...` to the watcher log and forecasting carries on.
+- `pml backup-files --timestamped FILE...` does the same on demand.
+- `pml backup-status [--max-age-hours 12]` re-checks the newest folder with a `verified.json` against its checksums, falls back to older ones if it fails, and prints the age. It exits 1 with a warning when no verified backup is newer than the limit, so it can run from cron or before a restart. A folder without `verified.json` never counts.
+
+`spend.jsonl` is appended by the evidence watcher, so a copy can very rarely end inside a line being written. The next slot's copy has the complete line.
+
 ## Cost forecast
 
 Monthly allocations: infrastructure/storage/backups $30, optional models $10, reserve $10. These are budgets, not vendor quotations. No billable service is provisioned by this repo.
@@ -78,7 +88,7 @@ For an observed dashboard workspace, create `workspace.json` with relative `run`
 
 ## Pilot scripts
 
-[`scripts/pilot/`](../scripts/pilot/) holds the restart loops for a pilot: [`capture.sh`](../scripts/pilot/capture.sh) (collector), [`evidence.sh`](../scripts/pilot/evidence.sh) and [`forecasts.sh`](../scripts/pilot/forecasts.sh). Each restarts its process after a crash until the pilot ends. They read their settings from environment variables, listed in [`.env.example`](../.env.example) under "Pilot scripts". `PML_PILOT_DIR`, `PML_PILOT_END` (UTC) and `PML_WATCHLIST` are required, and a script stops at once if one is missing. Keys stay in `.env`, which the watchers read through `uv run --env-file`.
+[`scripts/pilot/`](../scripts/pilot/) holds the restart loops for a pilot: [`capture.sh`](../scripts/pilot/capture.sh) (collector), [`evidence.sh`](../scripts/pilot/evidence.sh) and [`forecasts.sh`](../scripts/pilot/forecasts.sh). Each restarts its process after a crash until the pilot ends. They read their settings from environment variables, listed in [`.env.example`](../.env.example) under "Pilot scripts". `PML_PILOT_DIR`, `PML_PILOT_END` (UTC) and `PML_WATCHLIST` are required, and a script stops at once if one is missing. Keys stay in `.env`, which the watchers read through `uv run --env-file`. `forecasts.sh` also needs `PML_BACKUP_DIR` there ([automatic research backups](#automatic-research-backups)).
 
 ```sh
 export PML_PILOT_DIR=data/pilot-2026-10 PML_PILOT_END=2026-10-18T22:35:44Z PML_WATCHLIST=data/live-check/watchlist.json PML_FORECAST_LOG_DIR=data/forecast-log

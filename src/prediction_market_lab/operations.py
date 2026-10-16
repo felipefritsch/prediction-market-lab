@@ -2,13 +2,20 @@
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import tempfile
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from prediction_market_lab.models import utc_now
 from prediction_market_lab.storage import atomic_write, canonical, read_archive
+
+BACKUP_DIR_ENV = "PML_BACKUP_DIR"
+VERIFIED = "verified.json"
 
 
 def backup(source: Path, destination: Path) -> dict[str, Any]:
@@ -73,6 +80,8 @@ def backup_files(destination: Path, sources: list[Path]) -> dict[str, Any]:
 	names = [path.name for path in sources]
 	if len(set(names)) != len(names):
 		raise ValueError("Backed-up files need distinct names")
+	if {"backup.json", VERIFIED} & set(names):
+		raise ValueError("backup.json and verified.json are reserved for the backup's own records")
 	if destination.exists():
 		raise ValueError("Backup needs a new directory")
 	missing = [str(path) for path in sources if not path.is_file()]
@@ -88,6 +97,83 @@ def backup_files(destination: Path, sources: list[Path]) -> dict[str, Any]:
 	manifest = {"files": files, "scope": "point-in-time copies of append-only research files"}
 	atomic_write(destination / "backup.json", canonical(manifest))
 	return manifest
+
+
+def backup_root(environ: Mapping[str, str] = os.environ) -> Path:
+	"""The directory for timestamped research backups; there is deliberately no local default."""
+	value = environ.get(BACKUP_DIR_ENV, "")
+	if not value:
+		raise ValueError(
+			f"Set {BACKUP_DIR_ENV} to a directory on another machine or synced storage"
+		)
+	root = Path(value).expanduser()
+	if not root.is_absolute():
+		raise ValueError(f"{BACKUP_DIR_ENV} must be an absolute path, not {value}")
+	return root
+
+
+def timestamped_backup(root: Path, sources: list[Path], *, now: datetime) -> dict[str, Any]:
+	"""`backup_files` into root/<UTC time>, verified by a restore before it is marked verified."""
+	# Never create the root: an unmounted volume would otherwise become a local directory.
+	if not root.is_dir():
+		raise FileNotFoundError(f"Backup directory not found: {root}")
+	destination = root / now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+	manifest = backup_files(destination, sources)
+	with tempfile.TemporaryDirectory(prefix="pml-backup-verify-") as directory:
+		restore(destination, Path(directory) / "restored")
+	verified = {
+		"created_at": now.astimezone(UTC).isoformat(),
+		"verified_at": utc_now().isoformat(),
+		"files": manifest["files"],
+	}
+	atomic_write(destination / VERIFIED, canonical(verified))
+	return {"backup": str(destination), **verified}
+
+
+def backup_after_slot(root: Path, sources: list[Path], *, now: datetime) -> str:
+	"""One log line; a failed backup is reported, never raised, so forecasting carries on."""
+	try:
+		result = timestamped_backup(root, [p for p in sources if p.is_file()], now=now)
+	except Exception as exc:
+		return f"BACKUP FAILED: {type(exc).__name__}: {exc}"
+	return json.dumps({"backup": result["backup"], "files": sorted(result["files"])})
+
+
+def backup_status(root: Path, *, max_age_hours: float, now: datetime) -> dict[str, Any]:
+	"""Age of the newest backup that was verified when made and still matches its checksums."""
+	if not root.is_dir():
+		raise FileNotFoundError(f"Backup directory not found: {root}")
+	marked = []
+	for path in root.glob(f"*/{VERIFIED}"):
+		doc = json.loads(path.read_text())
+		marked.append((datetime.fromisoformat(doc["created_at"]), path.parent, doc["files"]))
+	corrupt = []
+	newest = None
+	for created, folder, files in sorted(marked, key=lambda m: m[0], reverse=True):
+		if all(
+			(folder / name).is_file()
+			and hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest
+			for name, digest in files.items()
+		):
+			newest = (created, folder)
+			break
+		corrupt.append(folder.name)
+	result: dict[str, Any] = {
+		"root": str(root),
+		"max_age_hours": max_age_hours,
+		"verified_backups": len(marked),
+		"failed_checksums": corrupt,
+	}
+	if newest is None:
+		return {**result, "status": "none"}
+	age = (now - newest[0]).total_seconds() / 3600
+	return {
+		**result,
+		"status": "ok" if age <= max_age_hours else "stale",
+		"newest": str(newest[1]),
+		"created_at": newest[0].isoformat(),
+		"age_hours": round(age, 2),
+	}
 
 
 def restore(source: Path, destination: Path) -> dict[str, Any]:

@@ -17,10 +17,14 @@ from prediction_market_lab.config import Settings
 from prediction_market_lab.models import Contract, RawRecord, timestamp, utc_now
 from prediction_market_lab.operations import (
 	backup,
+	backup_after_slot,
 	backup_files,
+	backup_root,
+	backup_status,
 	budget_forecast,
 	restore,
 	restore_check,
+	timestamped_backup,
 )
 from prediction_market_lab.paper import PaperConfig
 from prediction_market_lab.storage import (
@@ -137,9 +141,21 @@ def parser() -> argparse.ArgumentParser:
 		command = sub.add_parser(name)
 		command.add_argument("source", type=Path)
 		command.add_argument("destination", type=Path)
-	backup_research = sub.add_parser("backup-files")
-	backup_research.add_argument("destination", type=Path)
-	backup_research.add_argument("files", type=Path, nargs="+")
+	backup_research = sub.add_parser(
+		"backup-files", help="Checksummed copy of forecasts, evidence and the spend ledger"
+	)
+	backup_research.add_argument(
+		"paths", type=Path, nargs="+", help="DESTINATION FILE... (with --timestamped: FILE...)"
+	)
+	backup_research.add_argument(
+		"--timestamped",
+		action="store_true",
+		help="Copy into a new UTC-timestamped folder of $PML_BACKUP_DIR and verify it by a restore",
+	)
+	status = sub.add_parser(
+		"backup-status", help="Warn when the newest verified backup in $PML_BACKUP_DIR is old"
+	)
+	status.add_argument("--max-age-hours", type=float, default=12)
 	budget = sub.add_parser("budget")
 	budget.add_argument("--raw-bytes", type=int, required=True)
 	budget.add_argument("--elapsed-seconds", type=float, required=True)
@@ -196,6 +212,11 @@ def parser() -> argparse.ArgumentParser:
 		help="Comma-separated; vendor/model names go through OpenRouter",
 	)
 	fwatch.add_argument("--samples", type=int, default=3)
+	fwatch.add_argument(
+		"--backup-after-slot",
+		action="store_true",
+		help="After each slot, back up the research files to a timestamped $PML_BACKUP_DIR folder",
+	)
 	fwatch.add_argument(
 		"--aware-models",
 		default="openai/gpt-6.1-sol,anthropic/claude-opus-5.5",
@@ -360,6 +381,14 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 	from prediction_market_lab import forecast
 	from prediction_market_lab.live_evidence import SpendCap
 
+	# Checked first, so a missing backup target stops the watcher before it spends anything.
+	backups = backup_root() if args.backup_after_slot else None
+	research_files = [
+		args.out,
+		args.evidence,
+		args.spend_ledger,
+		args.evidence.parent / "state.json",
+	]
 	until = timestamp(args.until)
 	assert until is not None
 	contracts = [
@@ -423,6 +452,8 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 						),
 						flush=True,
 					)
+				if backups:
+					print(backup_after_slot(backups, research_files, now=utc_now()), flush=True)
 			await asyncio.sleep(60)
 	finally:
 		await adapter.close()
@@ -658,7 +689,22 @@ def run(args: argparse.Namespace) -> Any:
 	if args.command == "backup":
 		return backup(args.source, args.destination)
 	if args.command == "backup-files":
-		return backup_files(args.destination, args.files)
+		if args.timestamped:
+			return timestamped_backup(backup_root(), args.paths, now=utc_now())
+		if len(args.paths) < 2:
+			raise ValueError("backup-files needs DESTINATION FILE..., or --timestamped FILE...")
+		return backup_files(args.paths[0], args.paths[1:])
+	if args.command == "backup-status":
+		result = backup_status(backup_root(), max_age_hours=args.max_age_hours, now=utc_now())
+		if result["status"] != "ok":
+			print(json.dumps(result, indent=2))
+			print(
+				f"pml: WARNING no verified backup in the last {args.max_age_hours:g} h "
+				f"(status {result['status']})",
+				file=sys.stderr,
+			)
+			raise SystemExit(1)
+		return result
 	if args.command == "restore":
 		return restore(args.source, args.destination)
 	if args.command == "backup-check":
