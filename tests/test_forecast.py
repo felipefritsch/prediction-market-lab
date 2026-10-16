@@ -153,7 +153,10 @@ def test_market_aware_members_are_never_pooled():
 
 def test_slots_include_six_hours():
 	kickoff = datetime(2026, 10, 17, 14, tzinfo=UTC)
-	assert [s for s, _ in forecast.forecast_slots(kickoff)] == ["t-24h", "t-6h", "t-1h"]
+	slots = forecast.forecast_slots(kickoff)
+	assert [s for s, _ in slots] == ["t-24h", "t-6h", "t-1h"]
+	# Each fires after the matching evidence search (24 h and 1 h before kickoff).
+	assert slots[-1][1] == kickoff.replace(hour=13, minute=10)
 
 
 def test_paper_fill_walks_ladder_while_edge_clears_and_reports_clv():

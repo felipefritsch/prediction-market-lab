@@ -72,8 +72,7 @@ def load_matches(
 				frame = pd.read_csv(
 					io.BytesIO(path.read_bytes()), encoding="utf-8-sig", on_bad_lines="skip"
 				)
-				frame["season"], frame["division"] = season, division
-				frames.append(frame)
+				frames.append(frame.assign(season=season, division=division))
 	matches = pd.concat(frames, ignore_index=True).dropna(
 		subset=["HomeTeam", "AwayTeam", "FTHG", "FTAG"]
 	)
@@ -417,10 +416,13 @@ def publish_hash(worktree: Path, record: dict[str, Any]) -> None:
 
 
 def forecast_slots(kickoff: datetime) -> list[tuple[str, datetime]]:
+	# Ten minutes after the evidence watcher's searches at 24 h and 1 h before kickoff, so the
+	# forecast reads that search's results instead of racing it.
+	lag = timedelta(minutes=10)
 	return [
-		("t-24h", kickoff - timedelta(hours=24)),
-		("t-6h", kickoff - timedelta(hours=6)),
-		("t-1h", kickoff - timedelta(hours=1)),
+		("t-24h", kickoff - timedelta(hours=24) + lag),
+		("t-6h", kickoff - timedelta(hours=6) + lag),
+		("t-1h", kickoff - timedelta(hours=1) + lag),
 	]
 
 
