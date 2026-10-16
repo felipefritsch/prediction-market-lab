@@ -133,17 +133,21 @@ def leave_one_out(
 
 def paper_trades(
 	forecast: dict[str, float],
-	book: dict[str, dict[str, float | None]],
+	book: dict[str, dict[str, Any]],
 	result: str,
 	*,
 	fee_rate: float,
 	threshold: float = 0.03,
 	stake: float = 10.0,
+	closing: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
-	"""Buy YES (or NO) at the recorded ask when the forecast clears it by `threshold`; hold to settlement.
+	"""Buy YES (or NO) when the forecast clears the ask by `threshold`; hold to settlement.
 
-	`book` maps "home_yes", "home_no", ... to {"bid": .., "ask": ..}. Taker fee per share is
-	fee_rate * price * (1 - price), as in the paper broker.
+	`book` maps "home_yes", "home_no", ... to {"bid", "ask", "asks": [[price, size], ...]}.
+	With a recorded ladder, the order walks levels only while each price still clears the
+	threshold and stops at `stake`; without one it assumes the whole stake fills at the best ask.
+	Taker fee per share is fee_rate * price * (1 - price), as in the paper broker. `closing`
+	maps the same keys to the midpoint at kickoff, giving closing-line value per trade.
 	"""
 	trades = []
 	for k in OUTCOMES:
@@ -151,21 +155,39 @@ def paper_trades(
 			("yes", forecast[k], result == k),
 			("no", 1 - forecast[k], result != k),
 		):
-			ask = (book.get(f"{k}_{side}") or {}).get("ask")
+			key = f"{k}_{side}"
+			quote = book.get(key) or {}
+			ask = quote.get("ask")
 			if ask is None or not 0 < ask < 1 or prob - ask < threshold:
 				continue
-			shares = stake / ask
-			fee = shares * fee_rate * ask * (1 - ask)
+			ladder = quote.get("asks") or [[ask, float("inf")]]
+			shares = spent = fee = 0.0
+			for price, size in ladder:
+				if prob - price < threshold or spent >= stake:
+					break
+				take = min(size, (stake - spent) / price)
+				shares += take
+				spent += take * price
+				fee += take * fee_rate * price * (1 - price)
+			if shares == 0:
+				continue
+			average = spent / shares
+			close = (closing or {}).get(key)
 			trades.append(
 				{
 					"outcome": k,
 					"side": side,
 					"ask": ask,
+					"average_price": average,
 					"forecast": prob,
-					"edge": prob - ask,
+					"edge": prob - average,
 					"shares": shares,
+					"filled_stake": spent,
+					"depth_checked": "asks" in quote,
 					"fee": fee,
-					"pnl": shares * float(wins) - stake - fee,
+					"pnl": shares * float(wins) - spent - fee,
+					"closing_mid": close,
+					"clv": None if close is None else close - average,
 				}
 			)
 	return trades

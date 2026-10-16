@@ -24,16 +24,18 @@ Inspiration: Aitchison, Jeen, Shevlane and Day (Mantic), [Diversity is the Stren
 | `llm:deepseek/deepseek-v4-pro-0813` | same | Different lineage | same |
 | `llm:moonshotai/kimi-k3` | same | The paper found Kimi close to the frontier cluster; kept to measure that | same |
 
-Language models run through OpenRouter at default temperature, three samples each, averaged per model, structured JSON output validated before use. They are told not to use or guess odds.
+Language models run through OpenRouter at default temperature, three samples each, averaged per model, structured JSON output validated before use. They are told not to use or guess odds, and the evidence they receive has every sentence mentioning betting, bookmakers, prediction markets or odds-like numbers removed (the count is stored per record).
+
+**Market-aware variants** (`mkt:openai/gpt-6.1-sol`, `mkt:anthropic/claude-opus-5.5`) receive the full evidence plus the market midpoints at the same moment, as Mantic's forecaster does, and may disagree. They are scored individually and never enter either pool, so the pools stay independent of the benchmark they are compared with.
 
 **Pools, both pre-registered before any result:** `ensemble` weighs every member equally (6 of 8 weights are language models); `ensemble_family` weighs the statistical and language-model families equally. Both are clipped to [0.02, 0.98] and renormalized. Weights are not fitted until enough frozen forecasts exist to fit them out of sample.
 
 ## Protocol
 
-1. **Slots.** One forecast per fixture 24 hours and 1 hour before kickoff (`pml forecast-watch`). A missed slot can still fire up to six hours late, never after kickoff; the actual time is recorded.
-2. **Inputs as of the slot.** Results up to the day before; evidence retrieved before the forecast (each item carries its first-retrieval time); no market price.
-3. **Market snapshot.** At the same moment, best bid and ask for all six YES/NO tokens from the public order book. Market probabilities are YES midpoints normalized to one (their raw sum is stored, typically about 1.005).
-4. **Freezing.** Each record is appended to `forecasts.jsonl` with the SHA-256 of its content and of the previous line, so any later edit breaks the chain.
+1. **Slots.** One forecast per fixture 24 hours, 6 hours and 1 hour before kickoff (`pml forecast-watch`). A missed slot can still fire up to six hours late, never after kickoff; the actual time is recorded.
+2. **Market snapshot first.** Before any model runs, the five best bid and ask levels for all six YES/NO tokens are read from the public order book. Market probabilities are YES midpoints normalized to one (their raw sum is stored, typically about 1.005).
+3. **Inputs as of the slot.** Results up to the day before; evidence retrieved before the forecast (each item carries its first-retrieval time), odds removed for market-blind members; the market only for market-aware members.
+4. **Freezing.** Each record is appended to `forecasts.jsonl` with the SHA-256 of its content and of the previous line, so any later edit breaks the chain. The hash, fixture, slot and time are then committed and pushed to the `forecast-log` branch on GitHub, whose push time is an independent timestamp.
 5. **Scoring** (`pml forecast-evaluate`, deterministic) once football-data.co.uk publishes results. Its full-time result is regulation time plus stoppage, matching the Polymarket rules.
 
 ## Evaluation
@@ -43,7 +45,8 @@ Language models run through OpenRouter at default temperature, three samples eac
 - **Against the benchmark:** paired bootstrap (2,000 resamples, fixed seed) of each forecaster's RPS minus the market's, with a 95% interval. Bookmaker closing odds (margin removed proportionally) are a second benchmark when present.
 - **Diversity:** mean pairwise Jensen-Shannon divergence between members and the market.
 - **Member value:** increase in the equal-weight pool's RPS when each member is removed.
-- **Paper trades:** for each outcome and side, buy $10 of YES (or NO) at the recorded best ask when the ensemble probability exceeds it by at least three points; hold to settlement; taker fee `shares × rate × p × (1 − p)` with the captured rate (5%). Reported separately per slot.
+- **Paper trades:** for each outcome and side, buy up to $10 of YES (or NO) when the ensemble probability exceeds the best ask by at least three points, walking the recorded five-level ask ladder only while each level still clears the threshold; hold to settlement; taker fee `shares × rate × p × (1 − p)` with the captured rate (5%). Reported separately per slot.
+- **Closing-line value:** with the recorder's output (`--capture`, `--watchlist`), each paper entry is compared with the last recorded midpoint before kickoff, and the market at kickoff is scored as a further benchmark. Prices moving towards an entry after it was made is a much faster signal than results.
 
 ## First results
 
@@ -68,17 +71,20 @@ Both are clearly worse than closing odds, as public rating models usually are. R
 
 - **Benchmark strength and liquidity.** Liquid football markets aggregate bookmaker information; the comparison is against one of the hardest benchmarks available.
 - **Sample size and dependence.** Six matches; home/draw/away probabilities within a match are not independent samples; the bootstrap resamples matches.
-- **Evidence can carry the market.** Previews retrieved by Exa often quote betting odds. That is not look-ahead, but it makes the language models less independent of the market than the instructions imply. Not yet filtered.
+- **Evidence can carry the market.** Previews retrieved by Exa often quote betting odds. Sentences mentioning betting or odds-like numbers are removed for market-blind members, but the filter is lexical: phrasing such as "Liverpool are heavy favourites" passes, and some harmless sentences (for example dates written 17/10) are dropped.
 - **Model identity drift.** OpenRouter model names can point to updated weights or different hosting providers; the record stores the requested name and cost, not a weight hash.
 - **Equal weights by fiat.** The pools are reasonable defaults, not optimized; fitting needs out-of-sample data the project does not have yet.
 - **Statistical members are basic.** No lineups, injuries, rest days, xG or Dixon-Coles correction; promoted teams inherit Championship ratings.
-- **Market snapshot.** One snapshot per slot; midpoints from best quotes; displayed depth at the ask is not checked, so a $10 paper fill can exceed what was available at that price. Minimum order size, latency and our own impact are ignored.
+- **Market snapshot.** One snapshot per slot; midpoints from best quotes; paper fills walk the recorded ladder, but latency between snapshot and order, minimum order size and our own impact are ignored. Closing prices come from the recorder's minute-by-minute REST snapshots, so "at kickoff" means the last snapshot up to a minute before it, and is missing where the recorder had a gap.
 - **Results source.** football-data.co.uk updates within days and can correct rows; forecasts without a result are skipped, not scored as losses.
-- **Integrity is local.** The hash chain shows the log was not edited after the fact only if the final hash is shared somewhere independent (not yet done).
+- **Integrity.** The hash chain plus the pushed hash shows when a record existed; it does not show that no *other* forecasts were made and discarded. Every slot that fires is published, so a missing slot is visible.
 - **Operational.** One laptop, a consumer VPN and home internet; gaps are recorded, not filled. The spend cap is shared by search, summaries and forecasts: if it were exhausted, later language-model members would be missing and evaluation would fall back to the members present in every record.
 - **Live match data.** API-Football's free plan serves only live fixtures for the current season, matched to ours by exact team names and kickoff; its dashboard rejects VPN connections (the API does not).
 
 ## Improving beyond the limitations
+
+Done before the 17–18 October matches: items 2 (closing-line value), 4 (market-blind and market-aware members), 5 (odds stripped from evidence), 7 (a 6-hour slot; line-ups are usually published about 75 minutes before kickoff, so the 1-hour slot already covers them), 8 (ladder-aware paper fills; routing through the full paper broker remains) and 9 (hashes pushed to the `forecast-log` branch). The rest need more data, more reviewed leagues or a server.
+
 
 1. **Grow the sample.** Add other leagues Polymarket lists and football-data.co.uk covers (Championship, La Liga, Serie A, Bundesliga, Ligue 1) plus the Champions League. Selection and rule review already work per league; the statistical members need each league's history.
 2. **Faster signal: closing-line value.** Compare each forecast and paper entry with the market price at kickoff, which the recorder already captures. Beating the closing price is a far less noisy indicator than results and needs fewer matches.

@@ -187,6 +187,14 @@ def parser() -> argparse.ArgumentParser:
 		help="Comma-separated; vendor/model names go through OpenRouter",
 	)
 	fwatch.add_argument("--samples", type=int, default=3)
+	fwatch.add_argument(
+		"--aware-models",
+		default="openai/gpt-6.1-sol,anthropic/claude-opus-5.5",
+		help="Models also run with the market midpoints shown; scored separately, never pooled",
+	)
+	fwatch.add_argument(
+		"--publish-dir", type=Path, help="Git worktree whose branch receives each frozen hash"
+	)
 	feval = sub.add_parser(
 		"forecast-evaluate", help="Score frozen forecasts against results and market"
 	)
@@ -194,6 +202,8 @@ def parser() -> argparse.ArgumentParser:
 	feval.add_argument("--data", type=Path, default=Path("data/football-data"))
 	feval.add_argument("--season", type=int, default=2026)
 	feval.add_argument("--out", type=Path, required=True)
+	feval.add_argument("--capture", type=Path, help="Recorder output, for closing-line value")
+	feval.add_argument("--watchlist", type=Path, help="Token map for --capture")
 	return p
 
 
@@ -348,7 +358,8 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 	]
 	fixtures = forecast.fixtures_from_watchlist(contracts)
 	models = tuple(m for m in args.models.split(",") if m)
-	clients = forecast.llm_clients(models) if models else {}
+	aware = tuple(m for m in args.aware_models.split(",") if m)
+	clients = forecast.llm_clients(models + aware) if models or aware else {}
 	prices = forecast.openrouter_prices() if "openrouter" in clients else {}
 	cap = SpendCap(args.spend_ledger, args.budget_usd)
 	adapter = PolymarketAdapter()
@@ -382,8 +393,14 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 						cap=cap,
 						now=utc_now(),
 						prices=prices,
+						aware_models=aware,
 					)
-					forecast.freeze(args.out, record)
+					record = forecast.freeze(args.out, record)
+					if args.publish_dir:
+						try:
+							forecast.publish_hash(args.publish_dir, record)
+						except Exception as exc:
+							print(f"hash publish failed: {type(exc).__name__}: {exc}", flush=True)
 					frozen += 1
 					print(
 						json.dumps(
@@ -418,7 +435,17 @@ def run(args: argparse.Namespace) -> Any:
 			matches = forecast.load_matches(
 				args.data, forecast.seasons(args.season, args.season), refresh=current
 			)
-			result = forecast.evaluate(args.forecasts, matches)
+			mids = assets = None
+			if args.capture and args.watchlist:
+				contracts = [
+					Contract.model_validate(c)
+					for c in json.loads(args.watchlist.read_text())["contracts"]
+				]
+				assets = {
+					f.fixture_id: f.yes_assets for f in forecast.fixtures_from_watchlist(contracts)
+				}
+				mids = forecast.reconciliation_mids(args.capture)
+			result = forecast.evaluate(args.forecasts, matches, mids=mids, assets=assets)
 		save_new(args.out, result)
 		return result
 	if args.command == "forecast-watch":

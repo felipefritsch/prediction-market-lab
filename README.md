@@ -81,10 +81,10 @@ A forecasting track asks a second question: can an ensemble of diverse forecaste
 ```sh
 # Walk-forward check of the statistical members against bookmaker closing odds
 uv run --locked --no-editable pml forecast-backtest --out data/forecast-backtest.json
-# Freeze forecasts 24 h and 1 h before each kickoff, each with a Polymarket book snapshot
+# Freeze forecasts 24 h, 6 h and 1 h before each kickoff, each with a Polymarket book snapshot; --publish-dir pushes each hash to a git branch
 uv run --locked --no-editable --env-file .env pml forecast-watch --watchlist data/watchlist.json --evidence data/evidence/evidence.json --out data/forecasts.jsonl --spend-ledger data/evidence/spend.jsonl --until 2026-10-18T22:00:00Z
 # After results are published: scores, diversity, leave-one-out and paper trades
-uv run --locked --no-editable pml forecast-evaluate --forecasts data/forecasts.jsonl --out data/forecast-evaluation.json
+uv run --locked --no-editable pml forecast-evaluate --forecasts data/forecasts.jsonl --capture data/live --watchlist data/watchlist.json --out data/forecast-evaluation.json
 ```
 
 Each forecast is appended to a hash-chained log with the market snapshot taken at the same moment, so nothing can be revised after kickoff. The evaluator is deterministic: ranked probability score, Brier, log loss and calibration error; paired bootstrap intervals against the market midpoint; pairwise Jensen-Shannon diversity; leave-one-out member value; and $10 paper trades at the recorded best ask when the ensemble clears it by three points, net of the taker fee. Language-model members are only evaluated prospectively, because their training data overlaps any historical season. On 2022–2025 the Elo model's RPS was 0.2018 against 0.1947 for bookmaker closing odds over 1,520 matches: the market benchmark is strong, and a weekend of six matches cannot show an edge either way.

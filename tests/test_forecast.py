@@ -130,3 +130,77 @@ def test_openrouter_output_parsing_tolerates_fences():
 	text = 'Here:\n```json\n{"home": 0.5, "draw": 0.3, "away": 0.2, "reasoning": "r"}\n```'
 	parsed = forecast.LLMForecast.model_validate_json(forecast.json_object(text))
 	assert parsed.home == 0.5
+
+
+def test_strip_odds_removes_betting_sentences_only():
+	text = (
+		"Reece James is a doubt for Saturday. Chelsea are 2.10 favourites with bookmakers. "
+		"Everton are unbeaten at home. Polymarket gives Everton 29%."
+	)
+	kept, removed = forecast.strip_odds(text)
+	assert kept == "Reece James is a doubt for Saturday. Everton are unbeaten at home."
+	assert removed == 2
+
+
+def test_market_aware_members_are_never_pooled():
+	members = {
+		"elo": {"home": 0.5, "draw": 0.3, "away": 0.2},
+		"mkt:m": {"home": 0.1, "draw": 0.1, "away": 0.8},
+	}
+	assert forecast.pool(forecast.pooled(members))["home"] == pytest.approx(0.5)
+	assert forecast.family_pool(members)["home"] == pytest.approx(0.5)
+
+
+def test_slots_include_six_hours():
+	kickoff = datetime(2026, 10, 17, 14, tzinfo=UTC)
+	assert [s for s, _ in forecast.forecast_slots(kickoff)] == ["t-24h", "t-6h", "t-1h"]
+
+
+def test_paper_fill_walks_ladder_while_edge_clears_and_reports_clv():
+	book = {"home_yes": {"bid": 0.39, "ask": 0.40, "asks": [[0.40, 10], [0.45, 100], [0.48, 100]]}}
+	trades = scoring.paper_trades(
+		{"home": 0.5, "draw": 0.3, "away": 0.2},
+		book,
+		"away",
+		fee_rate=0.0,
+		closing={"home_yes": 0.44},
+	)
+	trade = trades[0]
+	# 10 shares at 0.40, then $6 at 0.45; 0.48 no longer clears the 3-point threshold.
+	assert trade["shares"] == pytest.approx(10 + 6 / 0.45)
+	assert trade["filled_stake"] == pytest.approx(10)
+	assert trade["clv"] == pytest.approx(0.44 - 10 / trade["shares"])
+	assert trade["pnl"] == pytest.approx(-10)
+
+
+def test_closing_price_is_last_snapshot_before_kickoff():
+	kickoff = datetime(2026, 10, 17, 14, tzinfo=UTC)
+	mids = {
+		"t": [(kickoff.replace(hour=13), 0.4), (kickoff, 0.42), (kickoff.replace(hour=15), 0.9)]
+	}
+	closing = forecast.closing_prices({"kickoff": kickoff.isoformat()}, {"home_yes": "t"}, mids)
+	assert closing == {"home_yes": 0.42}
+
+
+def test_publish_hash_pushes_to_branch(tmp_path):
+	import subprocess
+
+	remote, work = tmp_path / "remote.git", tmp_path / "work"
+	subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+	subprocess.run(["git", "init", "-q", "-b", "forecast-log", str(work)], check=True)
+	for args in (
+		["config", "user.email", "t@example.invalid"],
+		["config", "user.name", "t"],
+		["remote", "add", "origin", str(remote)],
+		["commit", "-q", "--allow-empty", "-m", "start"],
+		["push", "-q", "-u", "origin", "forecast-log"],
+	):
+		subprocess.run(["git", "-C", str(work), *args], check=True)
+	forecast.publish_hash(work, {"fixture_id": "f", "slot": "t-1h", "sha256": "abc"})
+	log = subprocess.run(
+		["git", "-C", str(remote), "log", "--format=%s", "forecast-log"],
+		check=True,
+		capture_output=True,
+		text=True,
+	).stdout
+	assert log.splitlines()[0] == "Forecast hash f t-1h"
