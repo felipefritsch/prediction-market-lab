@@ -75,3 +75,18 @@ For an observed dashboard workspace, create `workspace.json` with relative `run`
 ## Evidence and forecast watchers
 
 `evidence-watch` (Exa searches, API-Football live events) and `forecast-watch` (frozen pre-match forecasts) run as separate processes beside the collector. Keys live in `.env` (`EXA_API_KEY`, `API_FOOTBALL_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`); pass `--env-file .env`. Both resume from their own files after a restart: fired search slots and spend from `state.json`/`spend.jsonl`, frozen slots from `forecasts.jsonl`. Check `state.json` for errors and football links, and `tail spend.jsonl` for costs. A refused call (`BudgetExceeded`) stops that kind of call, not the process. Never edit `forecasts.jsonl`; the hash chain would break.
+
+## Pilot scripts
+
+[`scripts/pilot/`](../scripts/pilot/) holds the restart loops for a pilot: [`capture.sh`](../scripts/pilot/capture.sh) (collector), [`evidence.sh`](../scripts/pilot/evidence.sh) and [`forecasts.sh`](../scripts/pilot/forecasts.sh). Each restarts its process after a crash until the pilot ends. They read their settings from environment variables, listed in [`.env.example`](../.env.example) under "Pilot scripts". `PML_PILOT_DIR`, `PML_PILOT_END` (UTC) and `PML_WATCHLIST` are required, and a script stops at once if one is missing. Keys stay in `.env`, which the watchers read through `uv run --env-file`.
+
+```sh
+export PML_PILOT_DIR=data/pilot-2026-10 PML_PILOT_END=2026-10-18T22:35:44Z PML_WATCHLIST=data/live-check/watchlist.json PML_FORECAST_LOG_DIR=data/forecast-log
+nohup caffeinate -i sh scripts/pilot/capture.sh >> "$PML_PILOT_DIR/run.log" 2>&1 &
+nohup sh scripts/pilot/evidence.sh >> "$PML_PILOT_DIR/evidence/run.log" 2>&1 &
+nohup sh scripts/pilot/forecasts.sh >> "$PML_PILOT_DIR/forecasts/run.log" 2>&1 &
+```
+
+Every restart runs `uv run --locked --no-editable`, which rebuilds the package from the working tree as it is at that moment, uncommitted edits included, into the shared `.venv`. While a pilot runs, keep the main checkout clean and on a checked commit, and develop and test in a separate `git worktree`, which has its own `.venv`.
+
+To move one watcher onto new code, check out the commit, wait until no slot is due, and stop only its Python process (`pkill -TERM -f "pml forecast-watch"`). Its loop restarts it 60 s later on the checked-out code. Confirm by comparing `shasum -a 256 .venv/lib/python3.12/site-packages/prediction_market_lab/forecast.py` with `git show HEAD:src/prediction_market_lab/forecast.py | shasum -a 256`.
