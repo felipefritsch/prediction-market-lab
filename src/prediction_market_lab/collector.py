@@ -267,6 +267,9 @@ async def collect(
 		if health["status"] == "running":
 			health["status"] = "interrupted"
 		if not engine.counts.get("book"):
-			health["status"] = "no_book_data"
+			# Keep "interrupted" visible; a run without books still fails qualification.
+			health["no_book_data"] = True
+			if health["status"] == "completed":
+				health["status"] = "no_book_data"
 		atomic_write(root / "health.json", canonical(health))
 	return health

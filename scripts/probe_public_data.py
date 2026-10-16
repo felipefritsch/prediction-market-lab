@@ -10,11 +10,7 @@ from typing import Any
 import httpx
 import websockets
 
-GAMMA = "https://gamma-api.polymarket.com"
-DATA = "https://data-api.polymarket.com"
-CLOB = "https://clob.polymarket.com"
-MARKET_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
-SPORTS_WS = "wss://sports-api.polymarket.com/ws"
+from prediction_market_lab.adapters import CLOB, DATA, GAMMA, MARKET_WS, SPORTS_WS
 
 
 async def rest(url: str, params: dict[str, Any]) -> tuple[dict[str, Any], Any]:
