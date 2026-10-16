@@ -158,6 +158,35 @@ def parser() -> argparse.ArgumentParser:
 	watcher.add_argument("--until", required=True)
 	watcher.add_argument("--mapping", type=Path, help="Reviewed football-map output")
 	watcher.add_argument("--budget-usd", type=float, default=20)
+	back = sub.add_parser(
+		"forecast-backtest", help="Walk-forward Elo/goal models vs bookmaker closing odds"
+	)
+	back.add_argument("--data", type=Path, default=Path("data/football-data"))
+	back.add_argument("--first-test-season", type=int, default=2022)
+	back.add_argument("--last-test-season", type=int, default=2025)
+	back.add_argument("--out", type=Path, required=True)
+	fwatch = sub.add_parser(
+		"forecast-watch", help="Freeze pre-match ensemble forecasts with a market snapshot"
+	)
+	fwatch.add_argument("--watchlist", type=Path, required=True)
+	fwatch.add_argument("--evidence", type=Path, required=True)
+	fwatch.add_argument(
+		"--out", type=Path, required=True, help="Append-only forecast log (JSON lines)"
+	)
+	fwatch.add_argument("--spend-ledger", type=Path, required=True)
+	fwatch.add_argument("--budget-usd", type=float, default=20)
+	fwatch.add_argument("--until", required=True)
+	fwatch.add_argument("--data", type=Path, default=Path("data/football-data"))
+	fwatch.add_argument("--season", type=int, default=2026, help="Current season start year")
+	fwatch.add_argument("--models", default="gpt-5.4-mini,gpt-4.1-mini")
+	fwatch.add_argument("--samples", type=int, default=3)
+	feval = sub.add_parser(
+		"forecast-evaluate", help="Score frozen forecasts against results and market"
+	)
+	feval.add_argument("--forecasts", type=Path, required=True)
+	feval.add_argument("--data", type=Path, default=Path("data/football-data"))
+	feval.add_argument("--season", type=int, default=2026)
+	feval.add_argument("--out", type=Path, required=True)
 	return p
 
 
@@ -299,8 +328,96 @@ async def evidence_command(args: argparse.Namespace) -> Any:
 	return mapping
 
 
+async def forecast_watch(args: argparse.Namespace) -> Any:
+	from datetime import timedelta
+
+	from prediction_market_lab import forecast
+	from prediction_market_lab.live_evidence import SpendCap
+
+	until = timestamp(args.until)
+	assert until is not None
+	contracts = [
+		Contract.model_validate(c) for c in json.loads(args.watchlist.read_text())["contracts"]
+	]
+	fixtures = forecast.fixtures_from_watchlist(contracts)
+	models = tuple(m for m in args.models.split(",") if m)
+	llm_client = None
+	if models:
+		from openai import OpenAI
+
+		llm_client = OpenAI(timeout=90, max_retries=1)
+	cap = SpendCap(args.spend_ledger, args.budget_usd)
+	adapter = PolymarketAdapter()
+	current = forecast.seasons(args.season, args.season)[0]
+	frozen = 0
+	try:
+		while (now := utc_now()) < until:
+			done = forecast.done_slots(args.out)
+			due = [
+				(fixture, slot)
+				for fixture in fixtures
+				for slot, at in forecast.forecast_slots(fixture.kickoff)
+				if f"{fixture.fixture_id}:{slot}" not in done
+				and at <= now < min(fixture.kickoff, at + timedelta(hours=6))
+			]
+			if due:
+				matches = forecast.load_matches(
+					args.data, forecast.seasons(args.season - 8, args.season), refresh=current
+				)
+				evidence = json.loads(args.evidence.read_text()) if args.evidence.exists() else []
+				for fixture, slot in due:
+					record = await forecast.forecast_once(
+						fixture,
+						slot,
+						matches,
+						evidence,
+						adapter=adapter,
+						llm_client=llm_client,
+						llm_models=models,
+						samples=args.samples,
+						cap=cap,
+						now=utc_now(),
+					)
+					forecast.freeze(args.out, record)
+					frozen += 1
+					print(
+						json.dumps(
+							{
+								"frozen": record["fixture_id"],
+								"slot": slot,
+								"ensemble": record["ensemble"],
+							}
+						),
+						flush=True,
+					)
+			await asyncio.sleep(60)
+	finally:
+		await adapter.close()
+	return {"frozen": frozen, "spent_usd": round(cap.spent, 4)}
+
+
 def run(args: argparse.Namespace) -> Any:
 	settings = Settings.load(args.config)
+	if args.command in {"forecast-backtest", "forecast-evaluate"}:
+		from prediction_market_lab import forecast
+
+		if args.command == "forecast-backtest":
+			matches = forecast.load_matches(
+				args.data, forecast.seasons(args.first_test_season - 8, args.last_test_season)
+			)
+			result = forecast.backtest(
+				matches, forecast.seasons(args.first_test_season, args.last_test_season)
+			)
+		else:
+			current = forecast.seasons(args.season, args.season)[0]
+			matches = forecast.load_matches(
+				args.data, forecast.seasons(args.season, args.season), refresh=current
+			)
+			result = forecast.evaluate(args.forecasts, matches)
+		save_new(args.out, result)
+		return result
+	if args.command == "forecast-watch":
+		return asyncio.run(forecast_watch(args))
 	if args.command in {"football-map", "evidence-watch"}:
 		return asyncio.run(evidence_command(args))
 	if args.command == "ingest-rss":

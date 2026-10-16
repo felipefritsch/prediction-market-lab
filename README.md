@@ -74,6 +74,21 @@ uv run --locked --no-editable --env-file .env pml research --run data/runs/windo
 
 Every paid call is checked against one append-only spend ledger before it is made; a call that could exceed `--budget-usd` is refused. Each evidence item keeps the time it was first retrieved, so an incident only sees items retrieved before it. Search engines cannot be queried as of a past time: evidence for a match must be collected while it happens. Model output is a candidate explanation citing evidence IDs, marked for researcher review, and falls back to the template on any failure. API-Football's free plan refuses current-season lookups by league or date but serves live fixtures, so `evidence-watch` polls live EPL fixtures every six minutes during match windows and links them by exact team names and kickoff (or a reviewed `--mapping`). Event minutes are match time, so they label what happened, not when prices could first react.
 
+## Pre-match forecasts against the market
+
+A forecasting track asks a second question: can an ensemble of diverse forecasters price EPL 1X2 outcomes better than Polymarket before kickoff? Members are chosen to differ in kind, following Aitchison et al., [Diversity is the Strength of the AI Crowd](https://arxiv.org/abs/2606.29661) (2026): an Elo rating model, a time-weighted Poisson goal model (both on football-data.co.uk results since 2014, Premier League and Championship), and language models reading the retrieved evidence, three samples each. They are combined by an equal-weight linear pool, pre-registered until enough frozen forecasts exist to fit weights out of sample.
+
+```sh
+# Walk-forward check of the statistical members against bookmaker closing odds
+uv run --locked --no-editable pml forecast-backtest --out data/forecast-backtest.json
+# Freeze forecasts 24 h and 1 h before each kickoff, each with a Polymarket book snapshot
+uv run --locked --no-editable --env-file .env pml forecast-watch --watchlist data/watchlist.json --evidence data/evidence/evidence.json --out data/forecasts.jsonl --spend-ledger data/evidence/spend.jsonl --until 2026-10-18T22:00:00Z
+# After results are published: scores, diversity, leave-one-out and paper trades
+uv run --locked --no-editable pml forecast-evaluate --forecasts data/forecasts.jsonl --out data/forecast-evaluation.json
+```
+
+Each forecast is appended to a hash-chained log with the market snapshot taken at the same moment, so nothing can be revised after kickoff. The evaluator is deterministic: ranked probability score, Brier, log loss and calibration error; paired bootstrap intervals against the market midpoint; pairwise Jensen-Shannon diversity; leave-one-out member value; and $10 paper trades at the recorded best ask when the ensemble clears it by three points, net of the taker fee. Language-model members are only evaluated prospectively, because their training data overlaps any historical season. On 2022–2025 the Elo model's RPS was 0.2018 against 0.1947 for bookmaker closing odds over 1,520 matches: the market benchmark is strong, and a weekend of six matches cannot show an edge either way.
+
 ## Start prospective collection
 
 Discovery is read-only. Use exact sport abbreviations from the current catalogue; do not guess IDs or infer contracts from titles.
