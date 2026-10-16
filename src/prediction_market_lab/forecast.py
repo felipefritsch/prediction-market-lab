@@ -673,6 +673,16 @@ def closing_prices(
 	return closing
 
 
+def pre_cutoff_fix(record: dict[str, Any]) -> bool:
+	"""Frozen before 4bb31db capped model evidence at the forecast time.
+
+	That commit also started writing `scheduled_at`, so its absence marks the older code. The live
+	watcher read evidence before taking the forecast time, so these records saw nothing retrieved
+	later (checked for the 2026-10 pilot); they are flagged, not excluded. See docs/forecasting.md.
+	"""
+	return "scheduled_at" not in record
+
+
 def evaluate(
 	forecast_path: Path,
 	matches: pd.DataFrame,
@@ -688,7 +698,15 @@ def evaluate(
 	from prediction_market_lab import scoring
 
 	records = [json.loads(line) for line in forecast_path.read_text().splitlines() if line]
-	report: dict[str, Any] = {"forecasts": len(records), "slots": {}}
+	report: dict[str, Any] = {
+		"forecasts": len(records),
+		"pre_cutoff_fix": [
+			{k: r.get(k) for k in ("fixture_id", "slot", "made_at", "sha256")}
+			for r in records
+			if pre_cutoff_fix(r)
+		],
+		"slots": {},
+	}
 	for slot in sorted({r["slot"] for r in records}):
 		rows, results, trades = [], [], []
 		for record in (r for r in records if r["slot"] == slot):
@@ -746,6 +764,7 @@ def evaluate(
 		report["slots"][slot] = {
 			"matches": len(rows),
 			"incomplete_ensembles": sum(1 for pool_ in in_pool if pool_ != full_pool),
+			"pre_cutoff_fix": sum(1 for r, _, _ in rows if pre_cutoff_fix(r)),
 			"scores": scoring.summarize(forecasts, results, "market"),
 			"diversity_js": scoring.diversity({**members, "market": forecasts["market"]}),
 			"leave_one_out_rps": scoring.leave_one_out(members, results),

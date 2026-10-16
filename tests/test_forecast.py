@@ -263,3 +263,40 @@ def test_evaluate_counts_ensembles_missing_a_member(tmp_path):
 	slot = forecast.evaluate(path, matches)["slots"]["t-1h"]
 	assert slot["matches"] == 2
 	assert slot["incomplete_ensembles"] == 1
+
+
+def test_evaluate_flags_forecasts_frozen_before_the_evidence_cutoff(tmp_path):
+	path = tmp_path / "forecasts.jsonl"
+	book = {f"{k}_{s}": {"bid": 0.3, "ask": 0.32} for k in forecast.OUTCOMES for s in ("yes", "no")}
+	for fixture_id, home, away, extra in (
+		("f", "Everton FC", "Chelsea FC", {}),
+		("g", "Fulham FC", "Hull City AFC", {"scheduled_at": "2026-10-17T13:10:00+00:00"}),
+	):
+		forecast.freeze(
+			path,
+			{
+				"fixture_id": fixture_id,
+				"slot": "t-1h",
+				"made_at": "2026-10-17T13:10:05+00:00",
+				"kickoff": "2026-10-17T14:00:00+00:00",
+				"home": home,
+				"away": away,
+				"members": {"elo": UNIFORM},
+				"ensemble": UNIFORM,
+				"market": {"book": book, "probabilities": UNIFORM},
+				"fee_rate": 0.05,
+				**extra,
+			},
+		)
+	matches = pd.DataFrame(
+		[
+			{"HomeTeam": h, "AwayTeam": a, "FTHG": 2, "FTAG": 0, "date": pd.Timestamp("2026-10-17")}
+			for h, a in (("Everton", "Chelsea"), ("Fulham", "Hull"))
+		]
+	)
+	report = forecast.evaluate(path, matches)
+	assert [(r["fixture_id"], r["made_at"]) for r in report["pre_cutoff_fix"]] == [
+		("f", "2026-10-17T13:10:05+00:00")
+	]
+	assert report["slots"]["t-1h"]["pre_cutoff_fix"] == 1
+	assert report["slots"]["t-1h"]["matches"] == 2

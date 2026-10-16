@@ -48,6 +48,26 @@ Language models run through OpenRouter at default temperature, three samples eac
 - **Paper trades:** for each outcome and side, buy up to $10 of YES (or NO) when the ensemble probability exceeds the best ask by at least three points, walking the recorded five-level ask ladder only while each level still clears the threshold; hold to settlement; taker fee `shares × rate × p × (1 − p)` with the captured rate (5%). Reported separately per slot.
 - **Closing-line value:** with the recorder's output (`--capture`, `--watchlist`), each paper entry is compared with the last recorded midpoint before kickoff, and the market at kickoff is scored as a further benchmark. Prices moving towards an entry after it was made is a much faster signal than results.
 
+### Forecasts frozen before the evidence cutoff
+
+Commit `4bb31db` (16 Oct 2026) restricted the evidence a model reads to items first retrieved (UTC) no later than the forecast time, and started writing `scheduled_at` on every record. Records without `scheduled_at` were frozen by the earlier code. `forecast-evaluate` lists them under `pre_cutoff_fix` (fixture, slot, `made_at`, hash) and counts them per slot. They are **flagged, not excluded**, and stay in every score.
+
+Why flag rather than exclude: the earlier watcher read `evidence.json` before taking the forecast time, so it could not see anything retrieved later either. That was checked for each record below: none of its `evidence_ids` was first retrieved, or published, after its `made_at`. To check how much a result depends on them, re-score without these rows.
+
+The 2026-10 pilot's pre-fix records (the forecast watcher ran `fe5cf0a` until its restart on 16 Oct; every later record carries `scheduled_at`):
+
+| Fixture | Slot | Match | `made_at` (UTC) | Evidence items | `sha256` (first 16) |
+|---|---|---|---|---|---|
+| `epl-1128425` | t-24h | Everton FC – Chelsea FC | 2026-10-16T11:30:09Z | 0 | `21f93b6eeaaefd89` |
+| `epl-1128431` | t-24h | Brentford FC – Liverpool FC | 2026-10-16T14:10:12Z | 5 | `90e77c20c9b1d547` |
+| `epl-1128438` | t-24h | Fulham FC – Hull City AFC | 2026-10-16T14:15:49Z | 5 | `4d6182a3f1f87fa2` |
+| `epl-1128443` | t-24h | Manchester City FC – Ipswich Town FC | 2026-10-16T14:19:11Z | 5 | `5de1767b146aedf5` |
+| `epl-1128447` | t-24h | Newcastle United FC – Aston Villa FC | 2026-10-16T16:40:09Z | 5 | `ad1b5a4109bc5fc2` |
+
+Everton–Chelsea also raced its own search and has no evidence (see `fe5cf0a`).
+
+`scheduled_at` also shows a slot fired late after a restart: such a record read evidence up to `made_at`, not up to the slot time. The evaluator does not flag lateness yet.
+
 ## First results
 
 Walk-forward backtest of the statistical members, 2022/23–2025/26 Premier League, 1,520 matches, against average bookmaker closing odds (`pml forecast-backtest`):
