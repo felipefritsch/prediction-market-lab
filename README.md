@@ -4,6 +4,8 @@
 
 A Python research application for football prediction markets: public-data recording, causal replay, microstructure studies, evidence dossiers and fully funded paper execution. The primary universe is EPL and Champions League regulation-time 1X2, with a small macro/politics comparison sample.
 
+**New here? Start with the [project overview](docs/overview.md):** the two research tracks, what the current pilot tests, the methods, and a map of the other documents.
+
 This is a fresh independent implementation. No former-employer code, credentials, configuration or news archives are included. There is **no live-trading integration**.
 
 ## Run the demonstration
