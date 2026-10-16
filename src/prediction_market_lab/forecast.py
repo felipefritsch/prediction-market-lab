@@ -219,33 +219,108 @@ LLM_PRICES = {
 }
 
 
+OPENROUTER = "https://openrouter.ai/api/v1"
+FORECAST_SCHEMA = {
+	"type": "object",
+	"properties": {
+		"home": {"type": "number"},
+		"draw": {"type": "number"},
+		"away": {"type": "number"},
+		"reasoning": {"type": "string"},
+	},
+	"required": ["home", "draw", "away", "reasoning"],
+	"additionalProperties": False,
+}
+
+
+def llm_clients(models: tuple[str, ...]) -> dict[str, Any]:
+	"""OpenAI for bare model names, OpenRouter for vendor/model names."""
+	import os
+
+	from openai import OpenAI
+
+	clients: dict[str, Any] = {}
+	if any("/" not in m for m in models):
+		clients["openai"] = OpenAI(timeout=180, max_retries=1)
+	if any("/" in m for m in models):
+		key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENROUTER_API", "")
+		if not key:
+			raise ValueError("Set OPENROUTER_API_KEY for vendor/model names")
+		clients["openrouter"] = OpenAI(base_url=OPENROUTER, api_key=key, timeout=180, max_retries=1)
+	return clients
+
+
+def openrouter_prices() -> dict[str, tuple[float, float]]:
+	"""Live USD per million tokens (input, output) for every OpenRouter model."""
+	rows = httpx.get(OPENROUTER + "/models", timeout=30).raise_for_status().json()["data"]
+	return {
+		r["id"]: (float(r["pricing"]["prompt"]) * 1e6, float(r["pricing"]["completion"]) * 1e6)
+		for r in rows
+		if r.get("pricing")
+	}
+
+
+def json_object(text: str) -> str:
+	start, end = text.find("{"), text.rfind("}")
+	if start < 0 or end < start:
+		raise ValueError("No JSON object in model output")
+	return text[start : end + 1]
+
+
 def llm_forecast(
-	client: Any,
+	clients: dict[str, Any],
 	model: str,
 	fixture: dict[str, Any],
 	evidence: list[dict[str, Any]],
 	charge: Callable[[str, float, str], None],
 	check: Callable[[float], None],
+	prices: dict[str, tuple[float, float]],
+	max_tokens: int = 8000,
 ) -> Probabilities:
 	payload = json.dumps({"fixture": fixture, "evidence": evidence[-15:]}, default=str)
-	price_in, price_out = LLM_PRICES[model]
-	check((len(payload) / 3 * price_in + 1500 * price_out) / 1e6)
-	response = client.responses.parse(
-		model=model,
-		instructions=LLM_INSTRUCTIONS,
-		input=payload,
-		text_format=LLMForecast,
-		max_output_tokens=1500,
-	)
-	usage = response.usage
-	charge(
-		"openai",
-		(usage.input_tokens * price_in + usage.output_tokens * price_out) / 1e6,
-		f"{model} forecast {fixture['fixture_id']}",
-	)
-	parsed = response.output_parsed
-	if parsed is None:
-		raise ValueError("Model returned no forecast")
+	price_in, price_out = prices.get(model) or LLM_PRICES[model]
+	check((len(payload) / 3 * price_in + max_tokens * price_out) / 1e6)
+	label = f"{model} forecast {fixture['fixture_id']}"
+	if "/" in model:
+		response = clients["openrouter"].chat.completions.create(
+			model=model,
+			messages=[
+				{"role": "system", "content": LLM_INSTRUCTIONS},
+				{"role": "user", "content": payload},
+			],
+			response_format={
+				"type": "json_schema",
+				"json_schema": {"name": "forecast", "strict": True, "schema": FORECAST_SCHEMA},
+			},
+			max_tokens=max_tokens,
+			extra_body={"usage": {"include": True}},
+		)
+		usage = response.usage
+		reported = (usage.model_extra or {}).get("cost") if usage else None
+		estimate = (
+			(usage.prompt_tokens * price_in + usage.completion_tokens * price_out) / 1e6
+			if usage
+			else max_tokens * price_out / 1e6
+		)
+		charge("openrouter", float(reported) if reported is not None else estimate, label)
+		content = response.choices[0].message.content or ""
+		parsed = LLMForecast.model_validate_json(json_object(content))
+	else:
+		result = clients["openai"].responses.parse(
+			model=model,
+			instructions=LLM_INSTRUCTIONS,
+			input=payload,
+			text_format=LLMForecast,
+			max_output_tokens=max_tokens,
+		)
+		charge(
+			"openai",
+			(result.usage.input_tokens * price_in + result.usage.output_tokens * price_out) / 1e6,
+			label,
+		)
+		if result.output_parsed is None:
+			raise ValueError("Model returned no forecast")
+		parsed = result.output_parsed
 	return normalize({"home": parsed.home, "draw": parsed.draw, "away": parsed.away})
 
 
@@ -257,6 +332,15 @@ def pool(
 	total = sum(weights[n] for n in members)
 	mixed = {k: sum(weights[n] * members[n][k] for n in members) / total for k in OUTCOMES}
 	return normalize(mixed, clip)
+
+
+def family_pool(members: dict[str, Probabilities]) -> Probabilities:
+	"""Secondary pre-registered pool: statistical and language-model families weigh equally."""
+	families: dict[str, list[str]] = {}
+	for name in members:
+		families.setdefault("llm" if name.startswith("llm:") else "statistical", []).append(name)
+	weights = {n: 1 / len(group) for group in families.values() for n in group}
+	return pool(members, weights)
 
 
 @dataclass
@@ -385,11 +469,12 @@ async def forecast_once(
 	evidence: list[dict[str, Any]],
 	*,
 	adapter: Any,
-	llm_client: Any,
+	llm_clients: dict[str, Any],
 	llm_models: tuple[str, ...],
 	samples: int,
 	cap: Any,
 	now: datetime,
+	prices: dict[str, tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
 	home, away = ALIASES[fixture.home], ALIASES[fixture.away]
 	played = matches[matches.date < pd.Timestamp(now).tz_localize(None).normalize()]
@@ -415,11 +500,15 @@ async def forecast_once(
 		"kickoff": fixture.kickoff.isoformat(),
 		"forecast_made_at": now.isoformat(),
 	}
-	for model in llm_models if llm_client is not None else ():
+	for model in llm_models if llm_clients else ():
 		draws = []
 		for _ in range(samples):
 			try:
-				draws.append(llm_forecast(llm_client, model, about, brief, cap.charge, cap.check))
+				draws.append(
+					llm_forecast(
+						llm_clients, model, about, brief, cap.charge, cap.check, prices or {}
+					)
+				)
 			except Exception as exc:
 				errors[f"llm:{model}"] = type(exc).__name__ + ": " + str(exc)[:200]
 		if draws:
@@ -437,6 +526,7 @@ async def forecast_once(
 		"members": members,
 		"weights": "equal (pre-registered until enough frozen forecasts to fit out of sample)",
 		"ensemble": pool(members),
+		"ensemble_family": family_pool(members),
 		"market": market,
 		"fee_rate": fixture.fee_rate,
 		"evidence_ids": [e["evidence_id"] for e in items[-15:]],
@@ -494,6 +584,8 @@ def evaluate(forecast_path: Path, matches: pd.DataFrame) -> dict[str, Any]:
 			n: [r["members"][n] for r, _, _ in rows] for n in names
 		}
 		forecasts["ensemble"] = [r["ensemble"] for r, _, _ in rows]
+		if all("ensemble_family" in r for r, _, _ in rows):
+			forecasts["ensemble_family"] = [r["ensemble_family"] for r, _, _ in rows]
 		forecasts["market"] = [m for _, m, _ in rows]
 		if all(b is not None for _, _, b in rows):
 			forecasts["bookmaker_closing"] = [b for _, _, b in rows]  # type: ignore[misc]

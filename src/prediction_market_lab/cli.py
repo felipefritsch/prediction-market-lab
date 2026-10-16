@@ -178,7 +178,14 @@ def parser() -> argparse.ArgumentParser:
 	fwatch.add_argument("--until", required=True)
 	fwatch.add_argument("--data", type=Path, default=Path("data/football-data"))
 	fwatch.add_argument("--season", type=int, default=2026, help="Current season start year")
-	fwatch.add_argument("--models", default="gpt-5.4-mini,gpt-4.1-mini")
+	fwatch.add_argument(
+		"--models",
+		default=(
+			"openai/gpt-6.1-sol,anthropic/claude-opus-5.5,google/gemini-4-argon,"
+			"x-ai/grok-4.7,deepseek/deepseek-v4-pro-0813,moonshotai/kimi-k3"
+		),
+		help="Comma-separated; vendor/model names go through OpenRouter",
+	)
 	fwatch.add_argument("--samples", type=int, default=3)
 	feval = sub.add_parser(
 		"forecast-evaluate", help="Score frozen forecasts against results and market"
@@ -341,11 +348,8 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 	]
 	fixtures = forecast.fixtures_from_watchlist(contracts)
 	models = tuple(m for m in args.models.split(",") if m)
-	llm_client = None
-	if models:
-		from openai import OpenAI
-
-		llm_client = OpenAI(timeout=90, max_retries=1)
+	clients = forecast.llm_clients(models) if models else {}
+	prices = forecast.openrouter_prices() if "openrouter" in clients else {}
 	cap = SpendCap(args.spend_ledger, args.budget_usd)
 	adapter = PolymarketAdapter()
 	current = forecast.seasons(args.season, args.season)[0]
@@ -372,11 +376,12 @@ async def forecast_watch(args: argparse.Namespace) -> Any:
 						matches,
 						evidence,
 						adapter=adapter,
-						llm_client=llm_client,
+						llm_clients=clients,
 						llm_models=models,
 						samples=args.samples,
 						cap=cap,
 						now=utc_now(),
+						prices=prices,
 					)
 					forecast.freeze(args.out, record)
 					frozen += 1

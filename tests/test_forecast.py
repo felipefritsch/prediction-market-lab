@@ -115,3 +115,18 @@ def test_evaluate_scores_frozen_forecasts_against_results(tmp_path):
 	assert slot["scores"]["ensemble"]["rps"] < slot["scores"]["market"]["rps"]
 	assert slot["paper_trades"][0]["outcome"] == "home"
 	assert json.dumps(report)
+
+
+def test_family_pool_balances_statistical_and_language_models():
+	members = {
+		"elo": {"home": 0.6, "draw": 0.2, "away": 0.2},
+		**{f"llm:m{i}": {"home": 0.2, "draw": 0.2, "away": 0.6} for i in range(6)},
+	}
+	assert forecast.family_pool(members)["home"] == pytest.approx(0.4)
+	assert forecast.pool(members)["home"] < 0.3
+
+
+def test_openrouter_output_parsing_tolerates_fences():
+	text = 'Here:\n```json\n{"home": 0.5, "draw": 0.3, "away": 0.2, "reasoning": "r"}\n```'
+	parsed = forecast.LLMForecast.model_validate_json(forecast.json_object(text))
+	assert parsed.home == 0.5
