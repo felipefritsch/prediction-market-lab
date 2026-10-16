@@ -1,6 +1,6 @@
 # Handoff
 
-State as of Friday 16 October 2026, 17:00 UTC. Detailed run notes and commands: `data/handover/HANDOVER.md` (local, not committed).
+State as of Friday 16 October 2026, 18:10 UTC. Detailed run notes and commands: `data/handover/HANDOVER.md` (local, not committed).
 
 ## What this project does
 
@@ -13,10 +13,11 @@ No trading. No wallet, keys to a venue, or order endpoint exist.
 
 ## Current state
 
-- **72-hour pilot running** on this Mac, 15 Oct 22:35 → 18 Oct 22:35 UTC, six EPL fixtures of 17–18 Oct (36 assets). Three detached processes, each restarting itself after a crash: recorder (`data/pilot-2026-10/capture/`), evidence watcher (Exa searches, API-Football live events), forecast watcher.
+- **72-hour pilot running** on this Mac, 15 Oct 22:35 → 18 Oct 22:35 UTC, six EPL fixtures of 17–18 Oct (36 assets). Three detached processes, each restarting itself after a crash: recorder (`data/pilot-2026-10/capture/`), evidence watcher (Exa searches, API-Football live events), forecast watcher. The forecast watcher was moved at 18:06 UTC onto `3cad970` via [`scripts/pilot/forecasts.sh`](scripts/pilot/forecasts.sh) (evidence cutoff, `scheduled_at`, automatic backups); the other two still run their original loops under `data/pilot-2026-10/`. Keep the main checkout clean while they run: every crash-restart rebuilds from it ([runbook](docs/runbook.md#pilot-scripts)).
 - **Done so far:** 5 of 6 T-24h forecasts frozen, hashes on the `forecast-log` branch; ~400k records; $1 of the $20 spend cap.
 - **After the run:** verify, backup check, replay, paper, research (with `--summarizer openai`), pilot report, `forecast-evaluate` once football-data.co.uk has the results; then update `docs/delivery-status.md`. Exact commands are in the local handover.
-- Code on `main` is green (`sh scripts/check.sh`: ruff, mypy, 79 tests) and pushed.
+- The five T-24h forecasts frozen before the evidence cutoff are flagged, not excluded, by `forecast-evaluate` ([list](docs/forecasting.md#forecasts-frozen-before-the-evidence-cutoff)).
+- Code on `main` is green (`sh scripts/check.sh`: ruff, mypy, 91 tests) and pushed.
 
 ## Decisions and why
 
@@ -31,7 +32,7 @@ No trading. No wallet, keys to a venue, or order endpoint exist.
 
 ## Open problems
 
-- **Forecasts and evidence are not backed up off this Mac** (Time Machine failed to mount on 16 Oct). Copy them with `pml backup-files` to storage on another machine after each slot ([runbook](docs/runbook.md#backup-and-restore)).
+- **Research backups go to iCloud Drive only** (`PML_BACKUP_DIR` in `.env`; Time Machine failed to mount on 16 Oct). The forecast watcher copies and verifies forecasts, evidence, spend ledger and state after each slot; `pml backup-status` warns when the newest verified copy is older than 12 h ([runbook](docs/runbook.md#automatic-research-backups)). The capture itself (`pml backup`) is still not copied off this Mac.
 
 - **Power and sleep:** the Mac sleeps when the lid is closed on battery (≈97 min of gaps on Friday morning). Needs the charger connected through Sunday.
 - **Network:** Polymarket resolves only via VPN here; API-Football's dashboard rejects the VPN (its API works). A server where both are reachable would remove both issues.
