@@ -52,7 +52,11 @@ def explain(packet: dict[str, Any], summarizer: Summarizer | None = None) -> dic
 	}
 	if summarizer is None:
 		return fallback
-	permitted = [e for e in packet["evidence"] if e["allow_model_input"]][:12]
+	# The latest retrievals before the move matter most (e.g. a goal over a day-old preview).
+	permitted = sorted(
+		(e for e in packet["evidence"] if e["allow_model_input"]),
+		key=lambda e: str(e.get("first_seen", "")),
+	)[-12:]
 	bounded = {
 		"incident_id": packet["incident_id"],
 		"facts": packet["facts"],

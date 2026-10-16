@@ -205,3 +205,22 @@ async def test_watch_links_live_fixture_and_respects_search_schedule(tmp_path, m
 	assert state["fired"] == ["epl-1:live-15m"]
 	assert sorted(calls) == ["api.exa.ai", "v3.football.api-sports.io"]
 	assert json.loads((tmp_path / "evidence.json").read_text())[0]["fixture_id"] == "epl-1"
+
+
+def test_model_sees_latest_twelve_items():
+	seen: list[str] = []
+
+	def capture(bounded):
+		seen.extend(e["evidence_id"] for e in bounded["evidence"])
+		return {"status": "no_convincing_explanation", "claims": []}
+
+	evidence = [
+		{
+			"evidence_id": f"e{i:02d}",
+			"allow_model_input": True,
+			"first_seen": (KICKOFF + timedelta(minutes=i)).isoformat(),
+		}
+		for i in range(20)
+	]
+	explain({"incident_id": "i", "facts": {}, "evidence": evidence[::-1]}, capture)
+	assert seen == [f"e{i:02d}" for i in range(8, 20)]
