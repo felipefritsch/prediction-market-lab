@@ -50,4 +50,8 @@ Public depth does not reveal exact queue position. This is paper simulation, not
 
 A default incident is a usable, same-epoch 60-second move of at least three probability points, with a five-minute fixture cooldown. These price-triggered cases are descriptive selection, separate from scheduled-event studies. Reports contain tested numerical facts and versioned rules, then-known evidence, missing information and later follow-up explicitly labeled as unavailable at alert time.
 
-Template explanations default to “no convincing explanation.” The optional summarizer protocol takes at most 12 permitted evidence items / 24 KB, validates structured claims and source IDs, and falls back on failure. It cannot overwrite numeric facts. No model API account or automatic spending is configured. First-seen must refer to the observed revision, not the original document's first publication.
+Template explanations default to “no convincing explanation.” The optional summarizer protocol takes at most 12 permitted evidence items / 24 KB, validates structured claims and source IDs, and falls back on failure. It cannot overwrite numeric facts. Since 16 October 2026 an OpenAI summarizer can be enabled with `--summarizer openai`; it receives the 12 most recently retrieved items before the move and every call is charged to the spend ledger. First-seen must refer to the observed revision, not the original document's first publication.
+
+## Pre-match forecasting
+
+The forecast-versus-market protocol, members, evaluation and limitations are in [forecasting.md](forecasting.md). It is a separate question from the microstructure studies above and shares only the recorder, the evidence store and the fee model.

@@ -17,6 +17,12 @@ Checked against official documentation and installed `polymarket-client==0.10.0`
 | [Cont, Kukanov, Stoikov](https://arxiv.org/abs/1011.6402) | OFI hypothesis motivation, not evidence of prediction-market alpha |
 | [Gould and Bonart](https://arxiv.org/abs/1512.03492) | Queue imbalance hypothesis motivation |
 | [football-data.org coverage](https://www.football-data.org/coverage) | Optional independent fixtures/results reference; not required by V1 |
+| [football-data.co.uk](https://www.football-data.co.uk/) | Historical and current-season results, expected goals and bookmaker (closing) odds for forecasting members and benchmarks |
+| [Exa search API](https://exa.ai/docs/reference/search) | Timed evidence retrieval; cost reported per call; results cannot be re-queried as of a past time |
+| [API-Football](https://www.api-football.com/documentation-v3) | Live EPL fixtures and events; free plan serves live data only for the current season |
+| [OpenRouter](https://openrouter.ai/docs) | Language-model forecasters from several vendors; live price list; reported per-call cost |
+| [Aitchison et al. 2026](https://arxiv.org/abs/2606.29661) | Ensemble diversity (Jensen-Shannon, leave-one-out) motivating member selection |
+| [Mantic: backtesting against Polymarket](https://blog.mantic.com/p/backtesting-against-polymarket) | Market-midpoint benchmark, bid/ask entry, edge vs liquidity |
 | [Microsoft EWS retirement](https://learn.microsoft.com/en-us/exchange/clients-and-mobile-in-exchange-online/deprecation-of-ews-exchange-online) | Future mailbox adapter should use Graph |
 
 The pinned SDK's public action definitions were used to check v2 parameter names: `condition_id` for trades/OI; `token_id`, `start`, `end`, `bucket_seconds`, cursor pagination for sampled prices. Explicit price windows are limited to 15 days. Backfill commands preserve raw pages and report endpoint exhaustion, not historical depth completeness.

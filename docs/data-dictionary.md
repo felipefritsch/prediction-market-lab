@@ -16,6 +16,11 @@ Probabilities lie in [0,1]. Probability points = 100 × probability difference. 
 | Fills / ledger | One simulated execution/account action | Price, shares, fee, inventory acquisition cost, cash effect or explicit settlement |
 | Evidence | One observed source version | URL/ID, publication, first observation of this version, update time and usage permissions |
 | Incidents | One threshold-triggered dossier | Measured change, then-known rules/evidence, candidate/no-explanation status, separately labeled follow-up |
+| Evidence store (`evidence.json`) | One search result or match event per fixture | Title, URL, excerpt ≤1,200 characters, publication date if given, `first_seen` = first retrieval; later retrievals of the same item are not stored again |
+| Spend ledger (`spend.jsonl`) | One paid or rate-limited call | UTC time, service, USD (provider-reported where available), short detail; the sum is checked against the cap before each call |
+| Watcher state (`state.json`) | One evidence-watch process | Search slots already fired, last match-data poll, API-Football fixture links and how they were made, errors |
+| Forecast log (`forecasts.jsonl`) | One fixture × slot | Member and pooled home/draw/away probabilities, market book and normalized midpoints at the same moment, evidence IDs, fee rate, data cutoff, `sha256` and `previous_sha256` |
+| Forecast evaluation | One slot | Scores, bootstrap differences vs market, calibration, JS diversity, leave-one-out, paper trades and P&L |
 
 ## Identifiers and clocks
 

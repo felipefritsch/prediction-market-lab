@@ -76,7 +76,7 @@ Every paid call is checked against one append-only spend ledger before it is mad
 
 ## Pre-match forecasts against the market
 
-A forecasting track asks a second question: can an ensemble of diverse forecasters price EPL 1X2 outcomes better than Polymarket before kickoff? Members are chosen to differ in kind, following Aitchison et al., [Diversity is the Strength of the AI Crowd](https://arxiv.org/abs/2606.29661) (2026): an Elo rating model, a time-weighted Poisson goal model (both on football-data.co.uk results since 2014, Premier League and Championship), and language models reading the retrieved evidence, three samples each. They are combined by an equal-weight linear pool, pre-registered until enough frozen forecasts exist to fit weights out of sample.
+A forecasting track asks a second question: can an ensemble of diverse forecasters price EPL 1X2 outcomes better than Polymarket before kickoff? Members are chosen to differ in kind, following Aitchison et al., [Diversity is the Strength of the AI Crowd](https://arxiv.org/abs/2606.29661) (2026): an Elo rating model, a time-weighted Poisson goal model (both on football-data.co.uk results since 2014, Premier League and Championship), and six language models from six vendors via OpenRouter reading the retrieved evidence, three samples each. The full protocol, expected results and limitations are in [docs/forecasting.md](docs/forecasting.md). They are combined by two pre-registered pools, one weighing members equally and one weighing the statistical and language-model families equally, until enough frozen forecasts exist to fit weights out of sample.
 
 ```sh
 # Walk-forward check of the statistical members against bookmaker closing odds
@@ -131,6 +131,6 @@ uv run --locked --no-editable pml pilot-report data/runs/window-01
 
 CI exercises offline tests, a demo and notebooks. Docker Compose and systemd examples are provided but not automatically deployed. The [runbook](docs/runbook.md) covers restart behavior, offsite backups, matchday qualification and cost projections.
 
-Further reading: [architecture](docs/architecture.md) · [data dictionary](docs/data-dictionary.md) · [source register](docs/sources.md) · [validation record](docs/validation.md) · [delivery status](docs/delivery-status.md) · [walkthrough](docs/walkthrough.md).
+Further reading: [architecture](docs/architecture.md) · [data dictionary](docs/data-dictionary.md) · [source register](docs/sources.md) · [validation record](docs/validation.md) · [delivery status](docs/delivery-status.md) · [forecasting](docs/forecasting.md) · [walkthrough](docs/walkthrough.md).
 
 Future extensions: executable within-event consistency with explicit negative-risk conversions, calibration/resolution economics, reviewed Kalshi contract matching, richer inventory control and independent sports-event feeds. These are separate from the initial research claims.

@@ -62,3 +62,7 @@ For an observed dashboard workspace, create `workspace.json` with relative `run`
 - Write research findings only after inspecting held-out results, exclusions and event uncertainty.
 - Publish only permitted data; live captures and credentials are excluded from Git.
 - Record the short walkthrough after the live pilot if describing observed market behavior.
+
+## Evidence and forecast watchers
+
+`evidence-watch` (Exa searches, API-Football live events) and `forecast-watch` (frozen pre-match forecasts) run as separate processes beside the collector. Keys live in `.env` (`EXA_API_KEY`, `API_FOOTBALL_KEY`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`); pass `--env-file .env`. Both resume from their own files after a restart: fired search slots and spend from `state.json`/`spend.jsonl`, frozen slots from `forecasts.jsonl`. Check `state.json` for errors and football links, and `tail spend.jsonl` for costs. A refused call (`BudgetExceeded`) stops that kind of call, not the process. Never edit `forecasts.jsonl`; the hash chain would break.

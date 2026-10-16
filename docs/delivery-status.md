@@ -27,6 +27,13 @@ From the same machine, Polymarket hosts resolved only through a consumer VPN; th
 
 Observed limits from that hour: the sports stream carried other leagues only, so the score-to-fixture join remains untested until a matchday; the market stream also delivered `new_market` messages for unrelated markets; canonical trade rows include public wallet and profile fields. Passive strategies received zero fills because public trade notifications lack stable identities, as designed.
 
+### Live evidence and forecasting — 16 October 2026
+
+- **72-hour pilot running** (15 Oct 22:35 UTC – 18 Oct 22:35 UTC) on the six reviewed EPL fixtures of 17–18 October; Felipe signed off the rule reviews on 16 October (rules unchanged since the watchlist was built). Gaps so far: a one-minute VPN switch and a 17-minute home-internet outage, both recorded.
+- **Evidence watcher:** timed Exa searches per fixture and live API-Football events, $20 shared spend cap.
+- **Forecast watcher:** Elo, goal model and six language models from six vendors, frozen 24 h and 1 h before kickoff with a market snapshot. Protocol, expectations and limitations: [forecasting.md](forecasting.md).
+- **Backtest:** statistical members are worse than bookmaker closing odds (Elo RPS 0.2018 vs 0.1947 over 1,520 matches). The weekend's six matches validate the pipeline; they cannot establish an edge.
+
 ## Explicit V1 boundaries
 
 - Selection is refreshed between fixed-watchlist capture sessions; no unattended auto-approval of new rule mappings.
@@ -34,7 +41,7 @@ Observed limits from that hour: the sports stream carried other leagues only, so
 - Canonical trade rows without unique identities preserve ambiguity rather than silently deduplicating trades/legs.
 - Public notifications without verified identity/aggressor semantics cannot fill passive simulated orders.
 - Event-study local comparison windows are descriptive; richer causal matching and independent event timestamps remain research work.
-- Optional summarizer protocol and failure fallback exist; no paid model provider is configured or called.
+- Optional summarizer protocol and failure fallback exist; an OpenAI summarizer is available behind a spend cap (16 October 2026).
 - RSS/manual sources work independently; mailbox ingestion/Graph, automatic email delivery and commercial sports feeds are later integrations.
 - Docker/systemd/CI files are provided; local tests do not establish a successful remote CI/deployment run.
 - There is a written walkthrough script; recording/publishing a personal recruiting video is a separate deliverable.
