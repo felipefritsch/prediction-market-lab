@@ -332,11 +332,13 @@ async def watch(
 			):
 				last_poll = now
 				try:
-					rows = await football_fixtures(
-						http, football_key, cap, {"live": str(EPL_LEAGUE)}
-					)
+					# The API accepts only "all" or two or more hyphenated league IDs, so one league
+					# is filtered here.
+					rows = await football_fixtures(http, football_key, cap, {"live": "all"})
 					at = utc_now()
 					for row in rows:
+						if (row.get("league") or {}).get("id") != EPL_LEAGUE:
+							continue
 						api_id = str(row["fixture"]["id"])
 						if api_id not in linked:
 							candidates = [f for f in live if same_fixture(fixtures[f], row)]

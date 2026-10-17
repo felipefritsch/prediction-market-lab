@@ -170,7 +170,7 @@ async def test_watch_links_live_fixture_and_respects_search_schedule(tmp_path, m
 		calls.append(request.url.host)
 		if request.url.host == "api.exa.ai":
 			return httpx.Response(200, json={"results": [], "costDollars": {"total": 0.007}})
-		assert request.url.params["live"] == "39"
+		assert request.url.params["live"] == "all"
 		return httpx.Response(
 			200,
 			json={
@@ -178,14 +178,17 @@ async def test_watch_links_live_fixture_and_respects_search_schedule(tmp_path, m
 				"response": [
 					{
 						"fixture": {
-							"id": 7,
+							"id": fixture_id,
 							"date": KICKOFF.isoformat(),
 							"status": {"short": "1H"},
 						},
+						"league": {"id": league},
 						"teams": {"home": {"name": "Brighton"}, "away": {"name": "Ipswich"}},
 						"goals": {"home": 0, "away": 0},
 						"events": [],
 					}
+					# Same names and kickoff in another league must not link.
+					for fixture_id, league in ((7, 39), (8, 140))
 				],
 			},
 		)
