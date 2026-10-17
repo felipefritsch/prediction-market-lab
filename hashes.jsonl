@@ -3,3 +3,4 @@
 {"fixture_id": "epl-1128438", "slot": "t-24h", "made_at": "2026-10-16T14:15:49.523583+00:00", "kickoff": "2026-10-17T14:00:00+00:00", "sha256": "4d6182a3f1f87fa2ddf9b8fe728ff2addafd17e12e121caf44c7e7a39139e6a9"}
 {"fixture_id": "epl-1128443", "slot": "t-24h", "made_at": "2026-10-16T14:19:11.553109+00:00", "kickoff": "2026-10-17T14:00:00+00:00", "sha256": "5de1767b146aedf5f1e89bd5c43fe3151bf03b2793c6edac4c2acb7dbd75f960"}
 {"fixture_id": "epl-1128447", "slot": "t-24h", "made_at": "2026-10-16T16:40:09.316314+00:00", "kickoff": "2026-10-17T16:30:00+00:00", "sha256": "ad1b5a4109bc5fc2aa2fa705ae467b514d2a97450dcd4d74fdcb406d2e246d8f"}
+{"fixture_id": "epl-1128425", "slot": "t-6h", "made_at": "2026-10-17T05:40:08.221420+00:00", "kickoff": "2026-10-17T11:30:00+00:00", "sha256": "3a6fa23000c4c49e7d9d120d47125633efffa600d6dd9c1ff6fec972185a2858"}
