@@ -221,6 +221,14 @@ def write_table(root: Path, name: str, rows: list[dict[str, Any]]) -> Path:
 		if rows
 		else pa.table({"_empty": pa.array([], pa.bool_())})
 	)
+	# 64-bit string offsets: a multi-day capture's raw payload column passes 2 GB, which plain
+	# strings cannot address when `take` combines its chunks. Parquet stores both the same way.
+	table = table.cast(
+		pa.schema(
+			pa.field(field.name, pa.large_string()) if pa.types.is_string(field.type) else field
+			for field in table.schema
+		)
+	)
 	if rows and "received_at" in keys and all(row.get("received_at") is not None for row in rows):
 		partitions: dict[str, list[int]] = {}
 		for index, row in enumerate(rows):

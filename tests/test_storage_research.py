@@ -8,8 +8,8 @@ from prediction_market_lab.incidents import evidence_asof, explain
 from prediction_market_lab.models import Evidence
 from prediction_market_lab.operations import backup, backup_files, restore
 from prediction_market_lab.replay import replay, update_metadata
-from prediction_market_lab.research import chronological_split, labels
-from prediction_market_lab.storage import Catalog, RawArchive, read_archive, verify_run
+from prediction_market_lab.research import chronological_split, labels, load_table
+from prediction_market_lab.storage import Catalog, RawArchive, read_archive, verify_run, write_table
 from prediction_market_lab.universe import select_universe
 from tests.conftest import START, raw, snapshot
 
@@ -237,3 +237,19 @@ def test_complete_football_families_and_cap(contract):
 		START,
 		CaptureConfig(),
 	)[0]
+
+
+def test_partitioned_tables_keep_text_as_plain_strings(tmp_path):
+	# Text is written with 64-bit offsets so a multi-day raw column cannot overflow on `take`.
+	rows = [
+		{"received_at": f"2026-10-1{day}T12:00:00+00:00", "raw": "x" * 1000, "n": day}
+		for day in (7, 8, 8)
+	]
+	write_table(tmp_path, "events", rows)
+	assert sorted(p.name for p in (tmp_path / "tables" / "events").iterdir()) == [
+		"receipt_date=2026-10-17",
+		"receipt_date=2026-10-18",
+	]
+	frame = load_table(tmp_path, "events").sort_values("n")
+	assert frame["raw"].tolist() == ["x" * 1000] * 3
+	assert frame["n"].tolist() == [7, 8, 8]
