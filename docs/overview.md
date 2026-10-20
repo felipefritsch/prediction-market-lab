@@ -165,6 +165,7 @@ The central methodological rule: **nothing may use information that was not avai
 | [data-dictionary.md](data-dictionary.md) | Every dataset, identifier and clock |
 | [runbook.md](runbook.md) | Running, restarting, health checks, backups, costs |
 | [delivery-status.md](delivery-status.md) | Acceptance gates and what has been verified live |
+| [pilot-2026-10-report.md](pilot-2026-10-report.md) | Findings of the 72-hour pilot of 15–18 October 2026 |
 | [validation.md](validation.md) | Local verification record |
 | [sources.md](sources.md) | External sources and what each is used for |
 | [walkthrough.md](walkthrough.md) | Five-minute demonstration script |
